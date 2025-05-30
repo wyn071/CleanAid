@@ -1,169 +1,79 @@
+<?php session_start(); ?>
 <!DOCTYPE html>
 <html lang="en">
-
-
 <head>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
-
-  <title>CleanAid</title>
-  <meta content="" name="description">
-  <meta content="" name="keywords">
-
+  <title>Login | CleanAid</title>
 
   <!-- Favicons -->
-  <link href="assets/img/dswd-logo2.png" rel="icon">
-  <link href="assets/img/apple-touch-icon.png" rel="apple-touch-icon">
+  <link href="assets/img/logo.png" rel="icon">
 
+  <!-- Bootstrap & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
-  <!-- Google Fonts -->
-  <link href="https://fonts.gstatic.com" rel="preconnect">
-  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-
-
-  <!-- Vendor CSS Files -->
-  <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-  <link href="assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
-  <link href="assets/vendor/quill/quill.snow.css" rel="stylesheet">
-  <link href="assets/vendor/quill/quill.bubble.css" rel="stylesheet">
-  <link href="assets/vendor/remixicon/remixicon.css" rel="stylesheet">
-  <link href="assets/vendor/simple-datatables/style.css" rel="stylesheet">
-
-
-  <!-- Template Main CSS File -->
+  <!-- Custom CSS -->
   <link href="assets/css/style.css" rel="stylesheet">
 </head>
-<?php session_start(); ?>
-<body style="background: url('assets/img/bg-login.jpg') no-repeat center center; background-size: cover;">
+<body class="d-flex align-items-center justify-content-center min-vh-100">
 
+  <div class="d-flex login-card flex-md-row flex-column">
+    <!-- Left Section -->
+    <div class="left col-md-6 text-center bg-light">
+      <img src="assets/img/logo.png" alt="CleanAid Logo">
+    </div>
 
-
-  <main>
-    <div class="container">
-
-
-      <section class="section register min-vh-100 d-flex flex-column align-items-center justify-content-center py-4">
-        <div class="container">
-          <div class="row justify-content-center">
-            <div class="col-lg-4 col-md-6 d-flex flex-column align-items-center justify-content-center">
-
-
-              <!-- Logo -->
-              <div class="mb-4 text-center">
-                <img src="assets/img/dswd-logo3.png" alt="Logo" class="img-fluid" style="max-width: 150px;">
-              </div>
-
-
-              <div class="card mb-3">
-                <div class="card-body">
-
-
-                  <div class="pt-4 pb-2">
-                    <h5 class="card-title text-center pb-0 fs-4">Login to Your Account</h5>
-                    <p class="text-center small">Enter your username & password to login</p>
-                  </div>
-
-
-                  <form class="row g-3 needs-validation" action="./controller/login.php" method="POST" novalidate>
-
-
-                    <div class="col-12">
-                      <label for="yourEmail" class="form-label">Email Address</label>
-                      <div class="input-group has-validation">
-                        <input type="email" name="email" class="form-control" id="yourEmail" required>
-                        <div class="invalid-feedback">Please enter your email address.</div>
-                      </div>
-                    </div>
-
-
-                    <div class="col-12">
-                      <label for="yourPassword" class="form-label">Password</label>
-                      <input type="password" name="password" class="form-control" id="yourPassword" required>
-                      <div class="invalid-feedback">Please enter your password!</div>
-                    </div>
-
-
-                    <div class="col-12">
-                      <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="remember" value="true" id="rememberMe">
-                        <label class="form-check-label" for="rememberMe">Remember me</label>
-                      </div>
-                    </div>
-                    <div class="col-12">
-                      <button class="btn btn-primary w-100" type="submit" name="login">Login</button>
-                    </div>
-                    <div class="col-12">
-                      <p class="small mb-0">Don't have account? <a href="/Cleanaid/registration.php">Create an account</a></p>
-                    </div>
-                  </form>
-
-
-                </div>
-              </div>
-
-
-            </div>
+    <!-- Right Section -->
+    <div class="right col-md-6">
+      <h3 class="fw-bold text-center mb-4">Login</h3>
+      <form action="./controller/login.php" method="POST" class="needs-validation" novalidate>
+        <div class="mb-3">
+          <input type="email" class="form-control" name="email" placeholder="Email" required>
+          <div class="invalid-feedback">Please enter your email address.</div>
+        </div>
+        <div class="mb-3">
+          <input type="password" class="form-control" name="password" placeholder="Password" required>
+          <div class="invalid-feedback">Please enter your password.</div>
+        </div>
+        <div class="d-flex justify-content-between mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="remember" id="rememberMe">
+            <label class="form-check-label" for="rememberMe">Remember me</label>
           </div>
         </div>
-
-
-      </section>
-
-
+        <div class="d-grid">
+          <button type="submit" class="btn btn-danger" name="login">Login</button>
+        </div>
+        <p class="text-center mt-3 small">
+          Don't have an account?
+          <a href="registration.php">Sign up</a>
+        </p>
+      </form>
     </div>
-  </main><!-- End #main -->
+  </div>
 
+  <!-- Bootstrap Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-  <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
-
-
-  <!-- Vendor JS Files -->
-  <script src="assets/vendor/apexcharts/apexcharts.min.js"></script>
-  <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/vendor/chart.js/chart.umd.js"></script>
-  <script src="assets/vendor/echarts/echarts.min.js"></script>
-  <script src="assets/vendor/quill/quill.js"></script>
-  <script src="assets/vendor/simple-datatables/simple-datatables.js"></script>
-  <script src="assets/vendor/tinymce/tinymce.min.js"></script>
-  <script src="assets/vendor/php-email-form/validate.js"></script>
+  <!-- SweetAlert for Session Messages -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-
-<?php
-if(isset($_SESSION['message']) && $_SESSION['code'] !='') {
-    ?>
-    <script>
-      const Toast = Swal.mixin({
-        toast: true,
-        position: "top-end",
-        showConfirmButton: false,
-        timer: 3000,
-        timerProgressBar: true,
-        didOpen: (toast) => {
-          toast.onmouseenter = Swal.stopTimer;
-          toast.onmouseleave = Swal.resumeTimer;
-        }
-      });
-      Toast.fire({
-        icon: "<?php echo $_SESSION['code']; ?>",
-        title: "<?php echo $_SESSION['message']; ?>"
-      });
-    </script>
-    <?php
+  <?php if(isset($_SESSION['message']) && $_SESSION['code'] != ''): ?>
+  <script>
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: '<?php echo $_SESSION['code']; ?>',
+      title: '<?php echo $_SESSION['message']; ?>',
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
+  </script>
+  <?php
     unset($_SESSION['message']);
     unset($_SESSION['code']);
-}    
-?>
-  <!-- Template Main JS File -->
-  <script src="assets/js/main.js"></script>
-
-
+  endif;
+  ?>
 </body>
-
-
 </html>
-
-
-
