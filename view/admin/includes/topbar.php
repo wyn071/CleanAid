@@ -9,8 +9,8 @@ if (session_status() === PHP_SESSION_NONE) {
 <header id="header" class="header fixed-top d-flex align-items-center bg-white shadow-sm px-4 py-2" style="z-index: 1030;">
     <div class="d-flex align-items-center justify-content-between w-100">
         <!-- Logo + Name -->
-        <a href="/CleanAid-IT322-PIT/view/admin/dashboard.php" class="d-flex align-items-center text-decoration-none">
-            <img src="../../assets/img/dswd-logo3.png" alt="DSWD Logo" style="height: 35px;" class="me-2">
+        <a href="/CleanAid/view/admin/dashboard.php" class="d-flex align-items-center text-decoration-none">
+            <img src="../../assets/img/logo.png" alt="DSWD Logo" style="height: 35px;" class="me-2">
             <h5 class="m-0 fw-bold text-dark">CleanAid</h5>
         </a>
 

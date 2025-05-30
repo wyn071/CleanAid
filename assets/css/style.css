@@ -1,7 +1,8 @@
-/*#LOGIN*/
+/* LOGIN */
 body {
   background: url('../img/bg-login.jpg') center center / cover no-repeat;
 }
+
 .login-card {
   background: #fff;
   border-radius: 25px;
@@ -11,6 +12,7 @@ body {
   max-width: 850px;
   margin: auto;
 }
+
 .login-card .left {
   background: #fff;
   padding: 2rem;
@@ -20,18 +22,23 @@ body {
   justify-content: center;
   border-right: 1px solid #eee;
 }
+
 .login-card .left img {
   max-height: 200px;
 }
+
 .login-card .right {
   padding: 2.5rem;
 }
+
 .login-card .form-control {
   border-radius: 2rem;
 }
+
 .login-card .btn {
   border-radius: 2rem;
 }
+
 @media (max-width: 768px) {
   .login-card {
     flex-direction: column;
@@ -40,4 +47,275 @@ body {
     border-right: none;
     border-bottom: 1px solid #eee;
   }
+}
+
+/* REGISTRATION */
+body {
+      background: url('../img/bg-login.jpg') center center / cover no-repeat;
+    }
+    .register-card {
+      background: #fff;
+      border-radius: 25px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      border: 2px solid #dee2e6;
+      overflow: hidden;
+      max-width: 850px;
+      margin: auto;
+    }
+    .register-card .left {
+      background: #fff;
+      padding: 2rem;
+      display: flex;
+      border: 2px solid #dee2e6;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #eee;
+    }
+    .register-card .left img {
+      max-height: 200px;
+    }
+    .register-card .right {
+      padding: 2.5rem;
+    }
+    .register-card .form-control {
+      border-radius: 2rem;
+    }
+    .register-card .btn {
+      border-radius: 2rem;
+    }
+    @media (max-width: 768px) {
+      .register-card {
+        flex-direction: column;
+      }
+      .register-card .left {
+        border-right: none;
+        border-bottom: 1px solid #eee;
+      }
+    }
+    
+/* DASHBOARD */
+
+/* Base Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #f8f9fa;
+  overflow-x: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding-top: 64px; /* Adjust based on topbar height */
+  background-color: #fff;
+  border-right: 1px solid #dee2e6;
+  z-index: 1020;
+  overflow-y: auto;
+}
+
+.sidebar .sidebar-section {
+  padding: 0 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.95rem;
+  color: #212529;
+  text-decoration: none;
+  border-left: 4px solid transparent;
+  transition: background-color 0.2s, border-left 0.2s;
+}
+
+.sidebar .nav-link:hover {
+  background-color: #f8f9fa;
+  border-left: 4px solid #0d6efd;
+}
+
+.sidebar .nav-link.active {
+  background-color: #e9f3ff;
+  font-weight: 600;
+  border-left: 4px solid #0d6efd;
+  color: #0d6efd;
+}
+
+/* Main layout beside the sidebar */
+.main {
+  margin-left: 260px;
+  padding: 2rem;
+  padding-top: 90px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 70px);
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.container-fluid {
+  width: 100%;
+  padding: 0 1.5rem;
+}
+
+/* Page Title & Breadcrumb */
+.pagetitle {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.pagetitle h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.breadcrumb {
+  background: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  content: ">";
+  padding: 0 0.5rem;
+  color: #6c757d;
+}
+
+/* Card Styling */
+.card {
+  border-radius: 10px;
+  border: 1px solid #dee2e6;
+  background-color: #fff;
+  transition: all 0.2s ease-in-out;
+}
+
+.card-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+/* List Styling */
+ul.list-group {
+  margin-bottom: 0;
+  padding-left: 0;
+}
+
+.list-group-item {
+  border: none;
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 1rem;
+}
+
+.list-group-item:last-child {
+  border-bottom: none;
+}
+
+/* Footer */
+footer {
+  background: #003399;
+  color: #fff;
+  text-align: center;
+  padding: 1rem 0;
+  font-size: 0.9rem;
+  margin-top: auto;
+}
+
+footer small {
+  color: #ffc107;
+  display: block;
+  margin-top: 0.5rem;
+}
+
+/* Responsive Fixes */
+@media (max-width: 768px) {
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    padding-top: 0;
+  }
+
+  .main {
+    margin-left: 0;
+    padding: 1rem;
+  }
+
+  .pagetitle h1 {
+    font-size: 1.5rem;
+  }
+
+  .card-body {
+    padding: 1rem;
+  }
+}
+
+/* SIDEBAR */
+
+/* Sidebar Styling */
+.sidebar {
+  width: 260px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  padding-top: 80px; /* Adjust if your topbar height is different */
+  overflow-y: auto;
+  background-color: #fff;
+  border-right: 1px solid #dee2e6;
+  z-index: 1020;
+}
+
+.sidebar .sidebar-section {
+  padding: 0 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.95rem;
+  color: #212529;
+  text-decoration: none;
+  border-left: 4px solid transparent;
+  transition: background-color 0.2s, border-left 0.2s;
+}
+
+.sidebar .nav-link:hover {
+  background-color: #f8f9fa;
+  border-left: 4px solid #0d6efd;
+}
+
+.sidebar .nav-link.active {
+  background-color: #e9f3ff;
+  font-weight: 600;
+  border-left: 4px solid #0d6efd;
+  color: #0d6efd;
+}
+.main {
+  margin-left: 260px;
 }

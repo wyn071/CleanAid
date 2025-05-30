@@ -1,6 +1,7 @@
 <?php
 session_start();
 include("../../dB/config.php");
+include("./includes/header.php");
 
 // 🔐 Ensure user is logged in BEFORE including any layout
 if (!isset($_SESSION['user_id'])) {
@@ -78,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
 
 // Now safe to include layout files
 include("./includes/topbar.php");
-include("./includes/header.php");
 include("./includes/sidebar.php");
 ?>
 
