@@ -14,7 +14,7 @@ if (!$user_id) {
     exit();
 }
 
-// Get latest list_id for user
+// Get latest list_id
 $listQuery = $conn->prepare("SELECT list_id FROM beneficiarylist WHERE user_id = ? ORDER BY date_submitted DESC LIMIT 1");
 $listQuery->bind_param("i", $user_id);
 $listQuery->execute();
@@ -24,7 +24,6 @@ $list_id = $listResult->fetch_assoc()['list_id'] ?? null;
 $flaggedRecords = [];
 
 if ($list_id) {
-    // Get all processing_ids for the given list_id
     $processingQuery = $conn->prepare("SELECT processing_id FROM processing_engine WHERE list_id = ?");
     $processingQuery->bind_param("s", $list_id);
     $processingQuery->execute();
@@ -36,11 +35,9 @@ if ($list_id) {
     }
 
     if (!empty($processing_ids)) {
-        // Build dynamic placeholders
         $placeholders = implode(',', array_fill(0, count($processing_ids), '?'));
         $types = str_repeat('i', count($processing_ids));
 
-        // Prepare the statement dynamically
         $issueQuery = $conn->prepare("
             SELECT b.*, d.flagged_reason 
             FROM duplicaterecord d
@@ -69,21 +66,20 @@ if ($list_id) {
                 ];
             }
 
-            // Avoid duplicate reasons
             if (!in_array($row['flagged_reason'], $flaggedRecords[$bid]['reasons'])) {
                 $flaggedRecords[$bid]['reasons'][] = $row['flagged_reason'];
             }
         }
 
-        // Store flagged records for export
         $_SESSION['flagged_records'] = $flaggedRecords;
     }
 }
 
-// Summary counts
+// ✅ Use updated keys from clean_process.php
 $summary = $_SESSION['cleaning_result'] ?? [
-    'duplicates' => 0,
-    'missing' => 0,
+    'exact' => 0,
+    'possible' => 0,
+    'sound' => 0,
     'cleaned' => 0
 ];
 ?>
@@ -96,8 +92,9 @@ $summary = $_SESSION['cleaning_result'] ?? [
       <div class="card-body">
         <h5 class="card-title">Summary</h5>
         <ul class="mb-0">
-          <li><strong>Duplicates Found:</strong> <?= (int)$summary['duplicates'] ?></li>
-          <li><strong>Missing Fields:</strong> <?= (int)$summary['missing'] ?></li>
+          <li><strong>Exact Duplicates:</strong> <?= (int)$summary['exact'] ?></li>
+          <li><strong>Possible Duplicates:</strong> <?= (int)$summary['possible'] ?></li>
+          <li><strong>Sounds-Like Duplicates:</strong> <?= (int)$summary['sound'] ?></li>
           <li><strong>Total Records Processed:</strong> <?= (int)$summary['cleaned'] ?></li>
         </ul>
       </div>
@@ -118,7 +115,7 @@ $summary = $_SESSION['cleaning_result'] ?? [
                   <th>Province</th>
                   <th>City</th>
                   <th>Barangay</th>
-                  <th>Marital_status</th>
+                  <th>Marital Status</th>
                   <th>Reason(s)</th>
                 </tr>
               </thead>
@@ -141,7 +138,8 @@ $summary = $_SESSION['cleaning_result'] ?? [
               </tbody>
             </table>
           </div>
-          <form method="post" action="export_issues.php">
+
+          <form method="post" action="../../controller/export_issues.php">
             <button type="submit" class="btn btn-outline-secondary mt-3">
               <i class="bi bi-download"></i> Download Flagged Records (CSV)
             </button>
@@ -155,3 +153,4 @@ $summary = $_SESSION['cleaning_result'] ?? [
 </main>
 
 <?php include("./includes/footer.php"); ?>
+          

@@ -11,7 +11,6 @@ header('Content-Disposition: attachment; filename="flagged_issues.csv"');
 
 $output = fopen("php://output", "w");
 
-// Header row
 fputcsv($output, [
     'Beneficiary ID', 'Full Name', 'Birth Date', 'Barangay',
     'Region', 'Province', 'City', 'Marital Status', 'Flagged Reason(s)'
