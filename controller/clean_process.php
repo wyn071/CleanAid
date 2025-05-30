@@ -15,7 +15,7 @@ if (!$user_id) {
     exit();
 }
 
-// Fetch latest list_id
+// Get latest list_id
 $listQuery = $conn->prepare("SELECT list_id FROM beneficiarylist WHERE user_id = ? ORDER BY date_submitted DESC LIMIT 1");
 $listQuery->bind_param("i", $user_id);
 $listQuery->execute();
@@ -29,6 +29,7 @@ if (!$list_id) {
     exit();
 }
 
+// Set list to processing
 $conn->query("UPDATE beneficiarylist SET status = 'processing' WHERE list_id = '$list_id'");
 
 function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
@@ -75,7 +76,7 @@ try {
             $hasIssue = true;
         }
 
-        // 2. Soundex Match
+        // 2. Soundex
         foreach ($beneficiaries as $compare) {
             if (
                 $compare['beneficiary_id'] !== $beneficiary_id &&
@@ -90,7 +91,7 @@ try {
             }
         }
 
-        // 3. Fuzzy Match via Python
+        // 3. Fuzzy Match
         $scriptPath = realpath(__DIR__ . "/../scripts/cleaner.py");
         $data = [
             "target" => $target,
@@ -115,7 +116,6 @@ try {
     }
 
     $conn->query("UPDATE beneficiarylist SET status = 'completed' WHERE list_id = '$list_id'");
-
 } catch (Exception $e) {
     $conn->query("UPDATE beneficiarylist SET status = 'error' WHERE list_id = '$list_id'");
 }

@@ -3,7 +3,6 @@ import json
 from fuzzywuzzy import fuzz
 import jellyfish
 
-# Input from PHP
 data = json.loads(sys.argv[1])
 target = data['target']
 compare_to = data['compare_to']
@@ -18,13 +17,8 @@ target_name = full_name(target)
 for person in compare_to:
     person_name = full_name(person)
 
-    # Fuzzy match (name)
     fuzz_score = fuzz.token_set_ratio(target_name.lower(), person_name.lower())
-
-    # Jaro-Winkler (name)
     jw_score = jellyfish.jaro_winkler_similarity(target_name.lower(), person_name.lower())
-
-    # Birthdate match boost
     birth_match = target['birth_date'] == person['birth_date']
 
     if fuzz_score > 85 or jw_score > 0.90:
