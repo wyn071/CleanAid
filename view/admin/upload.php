@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
                     $checkResult = $check->get_result();
 
                     if ($checkResult->num_rows === 0) {
-                        $status = 'complete';
+                        $status = 'uploaded'; // Use a consistent initial status
                         $insertList = $conn->prepare("INSERT INTO beneficiarylist (list_id, user_id, fileName, date_submitted, status) VALUES (?, ?, ?, NOW(), ?)");
                         $insertList->bind_param("siss", $list_id, $user_id, $fileName, $status);
                         $insertList->execute();
@@ -45,6 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
 
                     $existingListIds[] = $list_id;
                 }
+
+                // Optional: Check for existing beneficiary before insert to avoid duplicates
 
                 $stmt = $conn->prepare("INSERT INTO beneficiary (
                     list_id, first_name, last_name, middle_name, ext_name,
@@ -87,7 +89,7 @@ include("./includes/sidebar.php");
     <h2 class="fw-bold mb-4">Data Upload</h2>
     <p class="text-muted mb-4">Upload your CSV file for beneficiary data processing</p>
 
-    <form method="POST" enctype="multipart/form-data" action="/CleanAid/controller/upload_process.php">
+    <form method="POST" enctype="multipart/form-data" action="upload.php">
       <div class="border border-dashed rounded-3 p-5 text-center bg-light">
         <input type="file" name="file" accept=".csv" class="form-control mb-3" required>
         <button type="submit" class="btn btn-primary">Upload File</button>

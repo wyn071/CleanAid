@@ -21,7 +21,7 @@ $listQuery->execute();
 $listResult = $listQuery->get_result();
 $list_id = $listResult->fetch_assoc()['list_id'] ?? null;
 
-$flaggedRecords = [];
+$flaggedRecords = $_SESSION['flagged_records'] ?? [];
 
 if ($list_id) {
     $processingQuery = $conn->prepare("SELECT processing_id FROM processing_engine WHERE list_id = ?");
@@ -153,4 +153,3 @@ $summary = $_SESSION['cleaning_result'] ?? [
 </main>
 
 <?php include("./includes/footer.php"); ?>
-          

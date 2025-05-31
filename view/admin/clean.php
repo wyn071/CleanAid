@@ -24,6 +24,14 @@ if (!$uploadedFile && $user_id) {
     <h2 class="fw-bold mb-4">Clean Data</h2>
     <p class="text-muted">Run data cleansing to detect duplicates and inconsistencies in your uploaded file.</p>
 
+    <?php if (isset($_SESSION['message'])): ?>
+      <div class="alert alert-<?= $_SESSION['code'] ?? 'info' ?> alert-dismissible fade show" role="alert">
+        <?= htmlspecialchars($_SESSION['message']) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      <?php unset($_SESSION['message'], $_SESSION['code']); ?>
+    <?php endif; ?>
+
     <div class="card shadow-sm mb-4">
       <div class="card-body">
         <h5 class="card-title">Uploaded File</h5>
@@ -53,6 +61,7 @@ if (!$uploadedFile && $user_id) {
             <li><strong>Possible Duplicates:</strong> <?= $_SESSION['cleaning_result']['possible'] ?? 0 ?></li>
             <li><strong>Records Cleaned:</strong> <?= $_SESSION['cleaning_result']['cleaned'] ?? 0 ?></li>
           </ul>
+        
         <?php else: ?>
           <p class="text-muted">No cleaning has been performed yet.</p>
         <?php endif; ?>
