@@ -3,30 +3,29 @@ import json
 from fuzzywuzzy import fuzz
 import jellyfish
 
+# Load JSON data passed from PHP
 data = json.loads(sys.argv[1])
-target = data['target']
-compare_to = data['compare_to']
+
+# Sample fields
+first_name = data['first_name']
+last_name = data['last_name']
+birth_date = data['birth_date']
+compare_to = data['compare_to']  # List of dicts with similar entries
 
 results = []
 
-def full_name(entry):
-    return f"{entry['first_name']} {entry.get('middle_name', '')} {entry['last_name']} {entry.get('ext_name', '')}".strip()
-
-target_name = full_name(target)
-
 for person in compare_to:
-    person_name = full_name(person)
+    fn_score = fuzz.ratio(first_name.lower(), person['first_name'].lower())
+    ln_score = fuzz.ratio(last_name.lower(), person['last_name'].lower())
+    name_similarity = (fn_score + ln_score) / 2
 
-    fuzz_score = fuzz.token_set_ratio(target_name.lower(), person_name.lower())
-    jw_score = jellyfish.jaro_winkler_similarity(target_name.lower(), person_name.lower())
-    birth_match = target['birth_date'] == person['birth_date']
+    jaro = jellyfish.jaro_winkler_similarity(first_name + last_name, person['first_name'] + person['last_name'])
 
-    if fuzz_score > 85 or jw_score > 0.90:
+    if name_similarity > 85 or jaro > 0.90:
         results.append({
             'match_id': person['beneficiary_id'],
-            'similarity': fuzz_score,
-            'jaro_winkler': round(jw_score, 3),
-            'birth_match': birth_match
+            'similarity': name_similarity,
+            'jaro_winkler': jaro
         })
 
 print(json.dumps(results))
