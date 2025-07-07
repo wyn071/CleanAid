@@ -32,12 +32,20 @@ if (!$list_id) {
 // Set list to processing
 $conn->query("UPDATE beneficiarylist SET status = 'processing' WHERE list_id = '$list_id'");
 
-// Helper to insert an issue
+// Helper to insert an issue (prevents duplicate inserts for same beneficiary/reason/run)
 function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
     $status = "unresolved";
-    $stmt = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("iiss", $beneficiary_id, $processing_id, $reason, $status);
-    $stmt->execute();
+    // Prevent duplicate issue for same beneficiary/reason/processing
+    $check = $conn->prepare("SELECT 1 FROM duplicaterecord WHERE beneficiary_id = ? AND processing_id = ? AND flagged_reason = ?");
+    $check->bind_param("iis", $beneficiary_id, $processing_id, $reason);
+    $check->execute();
+    $check->store_result();
+    if ($check->num_rows === 0) {
+        $stmt = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("iiss", $beneficiary_id, $processing_id, $reason, $status);
+        $stmt->execute();
+    }
+    $check->close();
 }
 
 try {
@@ -46,6 +54,9 @@ try {
     $stmt->bind_param("ss", $list_id, $processing_date);
     $stmt->execute();
     $processing_id = $conn->insert_id;
+
+    // Remove any old issues for this processing run (safety)
+    $conn->query("DELETE FROM duplicaterecord WHERE processing_id = '$processing_id'");
 
     $beneficiaries = [];
     $result = $conn->query("SELECT * FROM beneficiary WHERE list_id = '$list_id'");
@@ -59,6 +70,7 @@ try {
         $last_name = strtolower(trim($target['last_name']));
         $birth_date = trim($target['birth_date']);
         $hasIssue = false;
+        $flagged_reasons = [];
 
         // 1. Exact Match
         $matchCount = 0;
@@ -71,10 +83,11 @@ try {
                 $matchCount++;
             }
         }
-        if ($matchCount > 1) {
+        if ($matchCount > 1 && !in_array('exact', $flagged_reasons)) {
             insertIssue($conn, $beneficiary_id, $processing_id, "Exact duplicate (Name + Birthdate)");
             $exact_duplicates++;
             $hasIssue = true;
+            $flagged_reasons[] = 'exact';
         }
 
         // 2. Soundex
@@ -85,9 +98,12 @@ try {
                 soundex($compare['last_name']) === soundex($target['last_name']) &&
                 $compare['birth_date'] === $birth_date
             ) {
-                insertIssue($conn, $beneficiary_id, $processing_id, "Sounds-like match (SOUNDEX)");
-                $sound_duplicates++;
-                $hasIssue = true;
+                if (!in_array('sound', $flagged_reasons)) {
+                    insertIssue($conn, $beneficiary_id, $processing_id, "Sounds-like match (SOUNDEX)");
+                    $sound_duplicates++;
+                    $hasIssue = true;
+                    $flagged_reasons[] = 'sound';
+                }
                 break;
             }
         }
@@ -104,10 +120,11 @@ try {
 
         if ($matches && is_array($matches)) {
             foreach ($matches as $match) {
-                if ($match['similarity'] > 85 || $match['jaro_winkler'] > 0.90) {
+                if (($match['similarity'] > 85 || $match['jaro_winkler'] > 0.90) && !in_array('possible', $flagged_reasons)) {
                     insertIssue($conn, $beneficiary_id, $processing_id, "Possible duplicate (Fuzzy/Jaro-Winkler)");
                     $possible_duplicates++;
                     $hasIssue = true;
+                    $flagged_reasons[] = 'possible';
                     break;
                 }
             }
