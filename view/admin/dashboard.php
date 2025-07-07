@@ -54,9 +54,9 @@
                 <ul class="list-group list-group-flush">
                   <?php
                   $recentUploads = $conn->query("
-                      SELECT filename, MAX(date_submitted) AS date_submitted, status 
+                      SELECT fileName, MAX(date_submitted) AS date_submitted, status 
                       FROM beneficiarylist 
-                      GROUP BY filename 
+                      GROUP BY fileName 
                       ORDER BY date_submitted DESC 
                       LIMIT 5
                   ");
@@ -70,7 +70,7 @@
                       };
                       echo "<li class='list-group-item d-flex justify-content-between align-items-start'>
                               <div>
-                                <strong>" . htmlspecialchars($upload['filename']) . "</strong><br>
+                                <strong>" . htmlspecialchars($upload['fileName']) . "</strong><br>
                                 <small>" . date("M j, Y g:i A", strtotime($upload['date_submitted'])) . "</small>
                               </div>
                               <span class='badge bg-$badge mt-1 text-uppercase'>" . $upload['status'] . "</span>

@@ -32,6 +32,7 @@ if (!$list_id) {
 // Set list to processing
 $conn->query("UPDATE beneficiarylist SET status = 'processing' WHERE list_id = '$list_id'");
 
+// Helper to insert an issue
 function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
     $status = "unresolved";
     $stmt = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?, ?, ?, ?)");
@@ -91,7 +92,7 @@ try {
             }
         }
 
-        // 3. Fuzzy Match
+        // 3. Fuzzy Match (Python script)
         $scriptPath = realpath(__DIR__ . "/../scripts/cleaner.py");
         $data = [
             "target" => $target,
