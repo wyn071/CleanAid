@@ -51,36 +51,37 @@
             <div class="card shadow-sm">
               <div class="card-body">
                 <h5 class="card-title">Recent Uploads</h5>
-                <ul class="list-group list-group-flush">
-                  <?php
-                  $recentUploads = $conn->query("
-                      SELECT fileName, MAX(date_submitted) AS date_submitted, status 
-                      FROM beneficiarylist 
-                      GROUP BY fileName 
-                      ORDER BY date_submitted DESC 
-                      LIMIT 5
-                  ");
-                  if ($recentUploads && $recentUploads->num_rows > 0) {
-                    while ($upload = $recentUploads->fetch_assoc()) {
-                      $badge = match ($upload['status']) {
-                        'completed' => 'success',
-                        'pending' => 'warning',
-                        'error' => 'danger',
-                        default => 'secondary'
-                      };
-                      echo "<li class='list-group-item d-flex justify-content-between align-items-start'>
-                              <div>
-                                <strong>" . htmlspecialchars($upload['fileName']) . "</strong><br>
-                                <small>" . date("M j, Y g:i A", strtotime($upload['date_submitted'])) . "</small>
-                              </div>
-                              <span class='badge bg-$badge mt-1 text-uppercase'>" . $upload['status'] . "</span>
-                            </li>";
-                    }
-                  } else {
-                    echo "<li class='list-group-item text-muted'>No recent uploads found.</li>";
-                  }
-                  ?>
-                </ul>
+             <ul class="list-group list-group-flush" id="recent-uploads-list">
+  <?php
+  $recentUploads = $conn->query("
+      SELECT fileName, MAX(date_submitted) AS date_submitted, status 
+      FROM beneficiarylist 
+      GROUP BY fileName 
+      ORDER BY date_submitted DESC 
+      LIMIT 5
+  ");
+  if ($recentUploads && $recentUploads->num_rows > 0) {
+    while ($upload = $recentUploads->fetch_assoc()) {
+      $badge = match ($upload['status']) {
+        'completed' => 'success',
+        'pending' => 'warning',
+        'error' => 'danger',
+        default => 'secondary'
+      };
+      echo "<li class='list-group-item d-flex justify-content-between align-items-start'>
+              <div>
+                <strong>" . htmlspecialchars($upload['fileName']) . "</strong><br>
+                <small>" . date("M j, Y g:i A", strtotime($upload['date_submitted'])) . "</small>
+              </div>
+              <span class='badge bg-$badge mt-1 text-uppercase'>" . $upload['status'] . "</span>
+            </li>";
+    }
+  } else {
+    echo "<li class='list-group-item text-muted'>No recent uploads found.</li>";
+  }
+  ?>
+</ul>
+
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 /* LOGIN */
 body {
-  background: url('../img/bg-login.jpg') center center / cover no-repeat;
+  background: url('../img/bg-login.png') center center / cover no-repeat;
 }
 
 .login-card {
@@ -51,7 +51,7 @@ body {
 
 /* REGISTRATION */
 body {
-      background: url('../img/bg-login.jpg') center center / cover no-repeat;
+      background: url('../img/bg-login.png') center center / cover no-repeat;
     }
     .register-card {
       background: #fff;
