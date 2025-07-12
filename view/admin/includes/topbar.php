@@ -25,7 +25,7 @@ if (session_status() === PHP_SESSION_NONE) {
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="user_profile.php"><i class="bi bi-person me-2"></i> My Profile</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="/CleanAid/login.php"><i class="bi bi-box-arrow-right me-2"></i> Sign Out</a></li>
+                        <li><a class="dropdown-item" href="/CleanAid/index.html"><i class="bi bi-box-arrow-right me-2"></i> Sign Out</a></li>
                     </ul>
                 </li>
             </ul>

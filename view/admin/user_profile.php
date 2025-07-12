@@ -1,12 +1,10 @@
 <?php
 session_start();
-
 include("../../dB/config.php");
 include("./includes/header.php");
 include("./includes/topbar.php");
 include("./includes/sidebar.php");
 
-// Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
     echo "User not logged in.";
     exit;
@@ -14,7 +12,6 @@ if (!isset($_SESSION['user_id'])) {
 
 $userId = $_SESSION['user_id'];
 
-// Fetch user data using updated column names
 $query = "SELECT name, email, password FROM user WHERE user_id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $userId);
@@ -27,9 +24,28 @@ if ($result->num_rows > 0) {
     echo "User not found.";
     exit;
 }
+
+// Handle password change form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
+    $newPassword = trim($_POST['new_password']);
+
+    if (strlen($newPassword) < 6) {
+        $error = "Password must be at least 6 characters.";
+    } else {
+        // ❌ No hashing — storing plain text password (for dev/testing only)
+        $updateQuery = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
+        $updateQuery->bind_param("si", $newPassword, $userId);
+
+        if ($updateQuery->execute()) {
+            $success = "Password updated successfully.";
+            $user['password'] = $newPassword; // Update view after change
+        } else {
+            $error = "Failed to update password.";
+        }
+    }
+}
 ?>
 
-<!-- Main Content Start -->
 <main id="main" class="main">
 
   <div class="pagetitle">
@@ -40,12 +56,18 @@ if ($result->num_rows > 0) {
         <li class="breadcrumb-item active">Profile</li>
       </ol>
     </nav>
-  </div><!-- End Page Title -->
+  </div>
 
   <section class="profile">
     <div class="card">
       <div class="card-body pt-4">
         <h5 class="card-title">User Information</h5>
+
+        <?php if (isset($error)): ?>
+          <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+        <?php elseif (isset($success)): ?>
+          <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+        <?php endif; ?>
 
         <form>
           <div class="row mb-3">
@@ -64,16 +86,67 @@ if ($result->num_rows > 0) {
 
           <div class="row mb-3">
             <label class="col-md-4 col-lg-3 col-form-label">Password</label>
-            <div class="col-md-8 col-lg-9">
-              <input type="text" class="form-control" value="<?= htmlspecialchars($user['password']) ?>" disabled>
+            <div class="col-md-8 col-lg-9 input-group">
+              <input type="password" class="form-control" id="viewPassword" value="<?= htmlspecialchars($user['password']) ?>" disabled>
+              <button type="button" class="btn btn-outline-secondary" onclick="togglePassword()" title="Show/Hide Password">
+                <i class="bi bi-eye" id="toggleIcon"></i>
+              </button>
             </div>
+          </div>
+        </form>
+
+        <hr>
+
+        <h5 class="card-title">Change Password</h5>
+        <form method="POST">
+          <div class="row mb-3">
+            <label for="new_password" class="col-md-4 col-lg-3 col-form-label">New Password</label>
+            <div class="col-md-8 col-lg-9 input-group">
+              <input type="password" class="form-control" id="new_password" name="new_password" required minlength="6">
+              <button type="button" class="btn btn-outline-secondary" onclick="toggleNewPassword()" title="Show/Hide New Password">
+                <i class="bi bi-eye" id="newToggleIcon"></i>
+              </button>
+            </div>
+          </div>
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary">Update Password</button>
           </div>
         </form>
 
       </div>
     </div>
   </section>
+
 </main>
-<!-- Main Content End -->
+
+<script>
+  function togglePassword() {
+    const pass = document.getElementById('viewPassword');
+    const icon = document.getElementById('toggleIcon');
+    if (pass.type === 'password') {
+      pass.type = 'text';
+      icon.classList.remove('bi-eye');
+      icon.classList.add('bi-eye-slash');
+    } else {
+      pass.type = 'password';
+      icon.classList.remove('bi-eye-slash');
+      icon.classList.add('bi-eye');
+    }
+  }
+
+  function toggleNewPassword() {
+    const newPass = document.getElementById('new_password');
+    const newIcon = document.getElementById('newToggleIcon');
+    if (newPass.type === 'password') {
+      newPass.type = 'text';
+      newIcon.classList.remove('bi-eye');
+      newIcon.classList.add('bi-eye-slash');
+    } else {
+      newPass.type = 'password';
+      newIcon.classList.remove('bi-eye-slash');
+      newIcon.classList.add('bi-eye');
+    }
+  }
+</script>
 
 <?php include("./includes/footer.php"); ?>
