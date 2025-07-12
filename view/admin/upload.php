@@ -91,7 +91,7 @@ include("./includes/sidebar.php");
 
     <form method="POST" enctype="multipart/form-data" action="upload.php">
       <div class="border border-dashed rounded-3 p-5 text-center bg-light">
-        <input type="file" name="file" accept=".csv" class="form-control mb-3" required>
+        <input type="file" name="file[]" accept=".csv" class="form-control mb-3" required multiple>
         <button type="submit" class="btn btn-primary">Upload File</button>
       </div>
     </form>

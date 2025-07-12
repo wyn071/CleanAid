@@ -35,7 +35,6 @@ $conn->query("UPDATE beneficiarylist SET status = 'processing' WHERE list_id = '
 // Helper to insert an issue (prevents duplicate inserts for same beneficiary/reason/run)
 function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
     $status = "unresolved";
-    // Prevent duplicate issue for same beneficiary/reason/processing
     $check = $conn->prepare("SELECT 1 FROM duplicaterecord WHERE beneficiary_id = ? AND processing_id = ? AND flagged_reason = ?");
     $check->bind_param("iis", $beneficiary_id, $processing_id, $reason);
     $check->execute();
@@ -44,6 +43,7 @@ function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
         $stmt = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("iiss", $beneficiary_id, $processing_id, $reason, $status);
         $stmt->execute();
+        $stmt->close();
     }
     $check->close();
 }
@@ -51,12 +51,15 @@ function insertIssue($conn, $beneficiary_id, $processing_id, $reason) {
 try {
     $processing_date = date('Y-m-d H:i:s');
     $stmt = $conn->prepare("INSERT INTO processing_engine (list_id, processing_date, status) VALUES (?, ?, 'completed')");
-    $stmt->bind_param("ss", $list_id, $processing_date);
+    $stmt->bind_param("is", $list_id, $processing_date);
     $stmt->execute();
     $processing_id = $conn->insert_id;
 
     // Remove any old issues for this processing run (safety)
-    $conn->query("DELETE FROM duplicaterecord WHERE processing_id = '$processing_id'");
+    $delStmt = $conn->prepare("DELETE FROM duplicaterecord WHERE processing_id = ?");
+    $delStmt->bind_param("i", $processing_id);
+    $delStmt->execute();
+    $delStmt->close();
 
     $beneficiaries = [];
     $result = $conn->query("SELECT * FROM beneficiary WHERE list_id = '$list_id'");
@@ -112,7 +115,7 @@ try {
         $scriptPath = realpath(__DIR__ . "/../scripts/cleaner.py");
         $data = [
             "target" => $target,
-            "compare_to" => array_filter($beneficiaries, fn($b) => $b['beneficiary_id'] !== $beneficiary_id)
+            "compare_to" => array_values(array_filter($beneficiaries, fn($b) => $b['beneficiary_id'] !== $beneficiary_id))
         ];
         $command = escapeshellcmd("python \"$scriptPath\" '" . json_encode($data) . "'");
         $output = shell_exec($command);
@@ -120,7 +123,11 @@ try {
 
         if ($matches && is_array($matches)) {
             foreach ($matches as $match) {
-                if (($match['similarity'] > 85 || $match['jaro_winkler'] > 0.90) && !in_array('possible', $flagged_reasons)) {
+                if (
+                    isset($match['similarity'], $match['jaro_winkler']) &&
+                    ($match['similarity'] > 85 || $match['jaro_winkler'] > 0.90) &&
+                    !in_array('possible', $flagged_reasons)
+                ) {
                     insertIssue($conn, $beneficiary_id, $processing_id, "Possible duplicate (Fuzzy/Jaro-Winkler)");
                     $possible_duplicates++;
                     $hasIssue = true;

@@ -32,9 +32,7 @@
     <!-- Section: Settings -->
     <li class="sidebar-section mt-4">Settings</li>
     <li class="nav-item">
-      <a href="settings.php" class="nav-link <?= basename($_SERVER['PHP_SELF']) === 'settings.php' ? 'active' : '' ?>">
-        <i class="bi bi-gear me-2"></i> System Settings
-      </a>
+    
     </li>
     <li class="nav-item">
       <a href="user_profile.php" class="nav-link <?= basename($_SERVER['PHP_SELF']) === 'user_profile.php' ? 'active' : '' ?>">
