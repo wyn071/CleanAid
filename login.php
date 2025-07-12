@@ -18,33 +18,39 @@
 </head>
 <body class="d-flex align-items-center justify-content-center min-vh-100">
 
-  <div class="d-flex login-card flex-md-row flex-column">
+  <div class="d-flex login-card flex-md-row flex-column shadow rounded overflow-hidden">
     <!-- Left Section -->
-    <div class="left col-md-6 text-center bg-light">
-      <img src="assets/img/logo.png" alt="CleanAid Logo">
+    <div class="left col-md-6 text-center bg-light d-flex align-items-center justify-content-center p-4">
+      <img src="assets/img/logo.png" alt="CleanAid Logo" class="img-fluid" style="max-height: 200px;">
     </div>
 
     <!-- Right Section -->
-    <div class="right col-md-6">
+    <div class="right col-md-6 p-4">
       <h3 class="fw-bold text-center mb-4">Login</h3>
       <form action="./controller/login.php" method="POST" class="needs-validation" novalidate>
         <div class="mb-3">
           <input type="email" class="form-control" name="email" placeholder="Email" required>
           <div class="invalid-feedback">Please enter your email address.</div>
         </div>
-        <div class="mb-3">
+
+        <div class="mb-1">
           <input type="password" class="form-control" name="password" placeholder="Password" required>
           <div class="invalid-feedback">Please enter your password.</div>
         </div>
-        <div class="d-flex justify-content-between mb-3">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="remember" id="rememberMe">
-            <label class="form-check-label" for="rememberMe">Remember me</label>
-          </div>
+
+        <div class="mb-3 text-end">
+          <a href="forgot_password.php" class="small text-decoration-none">Forgot Password?</a>
         </div>
+
+        <div class="mb-3 form-check">
+          <input class="form-check-input" type="checkbox" name="remember" id="rememberMe">
+          <label class="form-check-label" for="rememberMe">Remember me</label>
+        </div>
+
         <div class="d-grid">
           <button type="submit" class="btn btn-danger" name="login">Login</button>
         </div>
+
         <p class="text-center mt-3 small">
           Don't have an account?
           <a href="registration.php">Sign up</a>
