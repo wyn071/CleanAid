@@ -2,25 +2,18 @@
 <?php include("./includes/topbar.php"); ?>
 <?php include("./includes/sidebar.php"); ?>
 
-<main id="main" class="main bg-body-tertiary" style="min-height: 100vh;">
+<main class="main bg-body-tertiary" style="min-height: 100vh;">
   <section class="container py-5">
-    <div class="mb-4">
-      <h2 class="fw-bold">Data Upload</h2>
-      <p class="text-muted">Upload your file/s for beneficiary data processing</p>
-    </div>
+    <h2 class="fw-bold">Data Upload</h2>
+    <p class="text-muted">Upload your file/s for beneficiary data processing</p>
 
-    <!-- Upload Box -->
-    <form method="POST" enctype="multipart/form-data" action="#" id="uploadForm">
-      <div id="dropZone" 
-           class="border rounded-4 bg-white text-center p-5 position-relative shadow-sm" 
-           style="border: 2px dashed #ccc; cursor: pointer; transition: background-color 0.2s ease;">
-        <input type="file" id="fileInput" name="file[]" accept=".csv" multiple hidden>
-
-        <!-- Plus icon -->
-        <div class="display-1 text-muted" style="pointer-events: none;">+</div>
-        <p class="text-muted mt-2 mb-0" style="pointer-events: none;">Click or drag & drop file/s here</p>
+    <form method="POST" enctype="multipart/form-data" action="../../controller/upload_process.php" id="uploadForm">
+      <div id="dropZone" class="border rounded-4 text-center p-5 shadow-sm" style="border: 2px dashed #ccc;">
+        <input type="file" id="fileInput" name="file[]" accept=".csv,.xls,.xlsx" multiple hidden>
+        <div class="display-1 text-muted">+</div>
+        <p class="text-muted">Click or drag & drop file/s here</p>
       </div>
-
+      <div id="fileList" class="mt-3 text-muted small text-center"></div>
       <div class="text-center mt-4">
         <button type="submit" class="btn btn-primary px-5">Upload Files</button>
       </div>
@@ -28,35 +21,27 @@
   </section>
 </main>
 
-<footer class="text-center py-3 bg-dark text-light small">
-  <div class="container">
-    © 2025 CleanAid. Developed for DSWD Region X
-  </div>
-</footer>
-
 <script>
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
+  const fileList = document.getElementById('fileList');
 
   dropZone.addEventListener('click', () => fileInput.click());
-
-  ['dragenter', 'dragover'].forEach(event => {
-    dropZone.addEventListener(event, e => {
-      e.preventDefault();
-      dropZone.classList.add('bg-light');
-    });
-  });
-
-  ['dragleave', 'drop'].forEach(event => {
-    dropZone.addEventListener(event, e => {
-      e.preventDefault();
-      dropZone.classList.remove('bg-light');
-    });
-  });
-
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('bg-light'); });
+  dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('bg-light'); });
   dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('bg-light');
     fileInput.files = e.dataTransfer.files;
+    showFiles(fileInput.files);
   });
+  fileInput.addEventListener('change', () => showFiles(fileInput.files));
+  function showFiles(files) {
+    fileList.innerHTML = "<strong>Selected file(s):</strong><br>";
+    for (let i = 0; i < files.length; i++) {
+      fileList.innerHTML += `• ${files[i].name}<br>`;
+    }
+  }
 </script>
 
 <?php include("./includes/footer.php"); ?>
