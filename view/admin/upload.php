@@ -21,7 +21,7 @@
       <div id="previewContainer" class="file-preview-row mt-4" style="display: none;"></div>
 
       <div class="text-center mt-4">
-        <button type="submit" class="btn btn-success px-5" id="uploadBtn" disabled>Start Upload</button>
+        <button type="submit" class="btn btn-primary px-5" id="uploadBtn" disabled>Start Upload</button>
       </div>
     </form>
   </section>

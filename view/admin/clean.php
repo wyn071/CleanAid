@@ -13,7 +13,7 @@ $errors = $_SESSION['upload_errors'] ?? [];
     <h2 class="fw-bold">Clean Data</h2>
     <p class="text-muted">Run data cleansing to detect duplicates and inconsistencies in your uploaded file.</p>
 
-    <!-- ✅ Uploaded Files Box (widened and left-aligned) -->
+    <!-- Uploaded Files -->
     <div class="card shadow-sm border-0 rounded-4 p-4 mb-4 w-100">
       <h5 class="fw-semibold mb-3">Uploaded Files</h5>
 
@@ -34,11 +34,14 @@ $errors = $_SESSION['upload_errors'] ?? [];
       <?php endif; ?>
     </div>
 
-    <!-- ✅ Start Cleaning Button (Outside the card) -->
+    <!-- Start Cleaning Button -->
     <?php if (!empty($files)): ?>
       <div class="text-center">
-        <form method="POST" action="../../controller/clean_process.php">
-          <button type="submit" class="btn btn-success px-4 rounded-pill">
+        <form method="POST" action="review.php">
+          <?php foreach ($files as $file): ?>
+            <input type="hidden" name="files[]" value="<?= htmlspecialchars($file) ?>">
+          <?php endforeach; ?>
+          <button type="submit" class="btn btn-primary px-4 rounded-pill">
             🧹 Start Cleaning
           </button>
         </form>
