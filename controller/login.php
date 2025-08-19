@@ -6,6 +6,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     $email = trim($_POST['email']);
     $password = trim($_POST['password']);
 
+    // Password validation: 8 chars minimum, starts with capital, at least 1 number
+    if (!preg_match('/^[A-Z][A-Za-z0-9]{7,}$/', $password) || !preg_match('/\d/', $password)) {
+        $_SESSION['message'] = "Password must be at least 8 characters, start with a capital letter, and contain at least one number.";
+        $_SESSION['code'] = "error";
+        header("Location: ../login.php");
+        exit();
+    }
+
     // Prepared statement to prevent SQL injection
     $stmt = $conn->prepare("SELECT user_id, name, role, email, password FROM user WHERE email = ? AND password = ? LIMIT 1");
     $stmt->bind_param("ss", $email, $password);
