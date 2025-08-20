@@ -1,4 +1,6 @@
-<?php session_start(); ?>
+<?php 
+session_start();
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +21,6 @@
 
   <!-- Custom CSS -->
   <link href="assets/css/style.css" rel="stylesheet">
-  
 </head>
 
 <body class="d-flex align-items-center justify-content-center min-vh-100">
@@ -35,19 +36,43 @@
       <h3 class="fw-bold text-center mb-4">Sign up</h3>
       <form action="./controller/registration.php" method="POST" class="needs-validation" novalidate>
         <div class="mb-3">
-          <input type="text" class="form-control" name="name" placeholder="Full Name" required>
+          <input 
+            type="text" 
+            class="form-control" 
+            name="name" 
+            placeholder="Full Name" 
+            required
+            value="<?php echo isset($_SESSION['old_name']) ? htmlspecialchars($_SESSION['old_name']) : ''; ?>">
           <div class="invalid-feedback">Please enter your full name.</div>
         </div>
         <div class="mb-3">
-          <input type="email" class="form-control" name="email" placeholder="Email" required>
+          <input 
+            type="email" 
+            class="form-control" 
+            name="email" 
+            placeholder="Email" 
+            required
+            value="<?php echo isset($_SESSION['old_email']) ? htmlspecialchars($_SESSION['old_email']) : ''; ?>">
           <div class="invalid-feedback">Please enter a valid email address.</div>
         </div>
         <div class="mb-3">
-          <input type="password" class="form-control" name="password" placeholder="Password" required>
+          <input 
+            type="password" 
+            class="form-control" 
+            name="password" 
+            placeholder="Password" 
+            required
+            value="<?php echo isset($_SESSION['old_password']) ? htmlspecialchars($_SESSION['old_password']) : ''; ?>">
           <div class="invalid-feedback">Please enter your password.</div>
         </div>
         <div class="mb-3">
-          <input type="password" class="form-control" name="cpassword" placeholder="Confirm Password" required>
+          <input 
+            type="password" 
+            class="form-control" 
+            name="cpassword" 
+            placeholder="Confirm Password" 
+            required
+            value="<?php echo isset($_SESSION['old_cpassword']) ? htmlspecialchars($_SESSION['old_cpassword']) : ''; ?>">
           <div class="invalid-feedback">Please confirm your password.</div>
         </div>
         <div class="d-grid">
@@ -78,9 +103,14 @@
       });
     </script>
     <?php
-    unset($_SESSION['message']);
-    unset($_SESSION['code']);
+    unset($_SESSION['message'], $_SESSION['code']);
     ?>
   <?php endif; ?>
+
 </body>
 </html>
+
+<?php
+// ✅ Clear old values AFTER displaying them
+unset($_SESSION['old_name'], $_SESSION['old_email'], $_SESSION['old_password'], $_SESSION['old_cpassword']);
+?>
