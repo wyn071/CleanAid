@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     $files = $_FILES['file'];
     $userId = $_SESSION['user_id'] ?? 1;
 
-    $_SESSION['uploaded_files'] = [];
+    $_SESSION['uploaded_lists'] = [];
 
     for ($i = 0; $i < count($files['name']); $i++) {
         $filename   = basename($files['name'][$i]);
@@ -37,11 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
             continue;
         }
 
-        // Insert record into beneficiarylist
+        // Insert metadata into beneficiarylist
         $sqlList = "INSERT INTO beneficiarylist (fileName, date_submitted, status, user_id)
                     VALUES ('$filename', NOW(), 'pending', '$userId')";
         mysqli_query($conn, $sqlList);
         $listId = mysqli_insert_id($conn);
+
+        $_SESSION['uploaded_lists'][] = $listId;
 
         // Insert record into processing_engine
         $sqlProc = "INSERT INTO processing_engine (list_id, processing_date, status)
@@ -49,24 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
         mysqli_query($conn, $sqlProc);
         $processingId = mysqli_insert_id($conn);
 
-        // Function to insert a row and check duplicates
+        // Function to insert a row
         function insertBeneficiary($conn, $listId, $processingId, $first_name, $last_name, $middle_name, $ext_name, $birth_date, $region, $province, $city, $barangay, $marital) {
             $sql = "INSERT INTO beneficiary 
                     (list_id, first_name, last_name, middle_name, ext_name, birth_date, region, province, city, barangay, marital_status) 
                     VALUES 
                     ('$listId', '$first_name', '$last_name', '$middle_name', '$ext_name', " . ($birth_date ? "'$birth_date'" : "NULL") . ", '$region', '$province', '$city', '$barangay', '$marital')";
             mysqli_query($conn, $sql);
-            $beneficiaryId = mysqli_insert_id($conn);
-
-            // Check for duplicates
-            $dupCheck = "SELECT beneficiary_id FROM beneficiary 
-                         WHERE first_name='$first_name' AND last_name='$last_name' AND birth_date='$birth_date' AND beneficiary_id != '$beneficiaryId'";
-            $dupRes = mysqli_query($conn, $dupCheck);
-            if (mysqli_num_rows($dupRes) > 0) {
-                $sqlDup = "INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status)
-                           VALUES ('$beneficiaryId', '$processingId', 'duplicate entry', 'flagged')";
-                mysqli_query($conn, $sqlDup);
-            }
         }
 
         // --- CSV parsing ---
@@ -97,7 +88,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
         // --- Excel parsing ---
         elseif (in_array($extension, ['xls', 'xlsx'])) {
             require '../../vendor/autoload.php';
-
             $spreadsheet = IOFactory::load($tmpName);
             $sheetData = $spreadsheet->getActiveSheet()->toArray();
 
@@ -119,14 +109,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
             }
         }
 
-        $_SESSION['uploaded_files'][] = $filename;
-
         // After processing, update status
         $updateProc = "UPDATE processing_engine SET status='completed' WHERE processing_id='$processingId'";
         mysqli_query($conn, $updateProc);
     }
 
-    $_SESSION['success'] = "✅ File(s) uploaded, beneficiaries saved, processing logged, and duplicates flagged!";
+    $_SESSION['success'] = "✅ File(s) uploaded, beneficiaries saved!";
     header("Location: ../view/admin/clean.php");
     exit;
 } else {
