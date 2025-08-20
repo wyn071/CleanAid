@@ -3,40 +3,29 @@ session_start();
 include('../dB/config.php');
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
-/**
- * Format dates to MySQL YYYY-MM-DD
- * Handles:
- *  - DD/MM/YYYY (from CSV/Excel exports)
- *  - YYYY-MM-DD (already formatted)
- *  - Excel numeric dates
- */
 function formatDate($dateStr) {
     if (!$dateStr) return null;
-
     $dateStr = trim($dateStr);
 
-    // Try DD/MM/YYYY
     $dt = DateTime::createFromFormat('d/m/Y', $dateStr);
     if ($dt) return $dt->format('Y-m-d');
 
-    // Try YYYY-MM-DD
     $dt = DateTime::createFromFormat('Y-m-d', $dateStr);
     if ($dt) return $dt->format('Y-m-d');
 
-    // Try Excel numeric date
     if (is_numeric($dateStr)) {
         $unix_date = ((int)$dateStr - 25569) * 86400; 
         return gmdate("Y-m-d", $unix_date);
     }
 
-    return null; // fallback
+    return null;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     $files = $_FILES['file'];
-    $userId = $_SESSION['user_id'] ?? 1; // fallback if no session user
+    $userId = $_SESSION['user_id'] ?? 1;
 
-    $_SESSION['uploaded_files'] = []; // reset previous uploads
+    $_SESSION['uploaded_files'] = [];
 
     for ($i = 0; $i < count($files['name']); $i++) {
         $filename   = basename($files['name'][$i]);
@@ -48,11 +37,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
             continue;
         }
 
-        // Insert record into beneficiarylist first
+        // Insert record into beneficiarylist
         $sqlList = "INSERT INTO beneficiarylist (fileName, date_submitted, status, user_id)
                     VALUES ('$filename', NOW(), 'pending', '$userId')";
         mysqli_query($conn, $sqlList);
         $listId = mysqli_insert_id($conn);
+
+        // Insert record into processing_engine
+        $sqlProc = "INSERT INTO processing_engine (list_id, processing_date, status)
+                    VALUES ('$listId', NOW(), 'in_progress')";
+        mysqli_query($conn, $sqlProc);
+        $processingId = mysqli_insert_id($conn);
+
+        // Function to insert a row and check duplicates
+        function insertBeneficiary($conn, $listId, $processingId, $first_name, $last_name, $middle_name, $ext_name, $birth_date, $region, $province, $city, $barangay, $marital) {
+            $sql = "INSERT INTO beneficiary 
+                    (list_id, first_name, last_name, middle_name, ext_name, birth_date, region, province, city, barangay, marital_status) 
+                    VALUES 
+                    ('$listId', '$first_name', '$last_name', '$middle_name', '$ext_name', " . ($birth_date ? "'$birth_date'" : "NULL") . ", '$region', '$province', '$city', '$barangay', '$marital')";
+            mysqli_query($conn, $sql);
+            $beneficiaryId = mysqli_insert_id($conn);
+
+            // Check for duplicates
+            $dupCheck = "SELECT beneficiary_id FROM beneficiary 
+                         WHERE first_name='$first_name' AND last_name='$last_name' AND birth_date='$birth_date' AND beneficiary_id != '$beneficiaryId'";
+            $dupRes = mysqli_query($conn, $dupCheck);
+            if (mysqli_num_rows($dupRes) > 0) {
+                $sqlDup = "INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status)
+                           VALUES ('$beneficiaryId', '$processingId', 'duplicate entry', 'flagged')";
+                mysqli_query($conn, $sqlDup);
+            }
+        }
 
         // --- CSV parsing ---
         if ($extension === 'csv') {
@@ -61,9 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
                 $row = 0;
                 while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
                     $row++;
-                    if ($row == 1) continue; // skip header row
+                    if ($row == 1) continue;
 
-                    // Skip beneficiary_id (0) and list_id (1)
                     $first_name   = mysqli_real_escape_string($conn, $data[2] ?? '');
                     $last_name    = mysqli_real_escape_string($conn, $data[3] ?? '');
                     $middle_name  = mysqli_real_escape_string($conn, $data[4] ?? '');
@@ -75,11 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
                     $barangay     = mysqli_real_escape_string($conn, $data[10] ?? '');
                     $marital      = mysqli_real_escape_string($conn, $data[11] ?? '');
 
-                    $sql = "INSERT INTO beneficiary 
-                            (list_id, first_name, last_name, middle_name, ext_name, birth_date, region, province, city, barangay, marital_status) 
-                            VALUES 
-                            ('$listId', '$first_name', '$last_name', '$middle_name', '$ext_name', '$birth_date', '$region', '$province', '$city', '$barangay', '$marital')";
-                    mysqli_query($conn, $sql);
+                    insertBeneficiary($conn, $listId, $processingId, $first_name, $last_name, $middle_name, $ext_name, $birth_date, $region, $province, $city, $barangay, $marital);
                 }
                 fclose($handle);
             }
@@ -92,9 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
             $sheetData = $spreadsheet->getActiveSheet()->toArray();
 
             foreach ($sheetData as $index => $row) {
-                if ($index == 0) continue; // skip header row
+                if ($index == 0) continue;
 
-                // Skip beneficiary_id (0) and list_id (1)
                 $first_name   = mysqli_real_escape_string($conn, $row[2] ?? '');
                 $last_name    = mysqli_real_escape_string($conn, $row[3] ?? '');
                 $middle_name  = mysqli_real_escape_string($conn, $row[4] ?? '');
@@ -106,18 +115,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
                 $barangay     = mysqli_real_escape_string($conn, $row[10] ?? '');
                 $marital      = mysqli_real_escape_string($conn, $row[11] ?? '');
 
-                $sql = "INSERT INTO beneficiary 
-                        (list_id, first_name, last_name, middle_name, ext_name, birth_date, region, province, city, barangay, marital_status) 
-                        VALUES 
-                        ('$listId', '$first_name', '$last_name', '$middle_name', '$ext_name', '$birth_date', '$region', '$province', '$city', '$barangay', '$marital')";
-                mysqli_query($conn, $sql);
+                insertBeneficiary($conn, $listId, $processingId, $first_name, $last_name, $middle_name, $ext_name, $birth_date, $region, $province, $city, $barangay, $marital);
             }
         }
 
-        $_SESSION['uploaded_files'][] = $filename; // keep track of uploaded files
+        $_SESSION['uploaded_files'][] = $filename;
+
+        // After processing, update status
+        $updateProc = "UPDATE processing_engine SET status='completed' WHERE processing_id='$processingId'";
+        mysqli_query($conn, $updateProc);
     }
 
-    $_SESSION['success'] = "✅ File(s) uploaded and beneficiaries saved!";
+    $_SESSION['success'] = "✅ File(s) uploaded, beneficiaries saved, processing logged, and duplicates flagged!";
     header("Location: ../view/admin/clean.php");
     exit;
 } else {
