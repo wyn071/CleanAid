@@ -29,16 +29,17 @@ if ($result->num_rows > 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
     $newPassword = trim($_POST['new_password']);
 
-    if (strlen($newPassword) < 6) {
-        $error = "Password must be at least 6 characters.";
+    // ✅ Validate password rules: 8 chars min, start with capital, at least 1 number
+    if (!preg_match('/^[A-Z](?=.*\d)[A-Za-z\d]{7,}$/', $newPassword)) {
+        $error = "Password must be at least 8 characters, start with a capital letter, and contain at least one number.";
     } else {
-        // ❌ No hashing — storing plain text password (for dev/testing only)
+        // ⚠️ Currently plain text storage (not secure!)
         $updateQuery = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
         $updateQuery->bind_param("si", $newPassword, $userId);
 
         if ($updateQuery->execute()) {
             $success = "Password updated successfully.";
-            $user['password'] = $newPassword; // Update view after change
+            $user['password'] = $newPassword;
         } else {
             $error = "Failed to update password.";
         }
@@ -69,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
           <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
         <?php endif; ?>
 
+        <!-- User Info -->
         <form>
           <div class="row mb-3">
             <label class="col-md-4 col-lg-3 col-form-label">Full Name</label>
@@ -97,12 +99,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
 
         <hr>
 
+        <!-- Change Password -->
         <h5 class="card-title">Change Password</h5>
         <form method="POST">
           <div class="row mb-3">
             <label for="new_password" class="col-md-4 col-lg-3 col-form-label">New Password</label>
             <div class="col-md-8 col-lg-9 input-group">
-              <input type="password" class="form-control" id="new_password" name="new_password" required minlength="6">
+              <input type="password" 
+                     class="form-control" 
+                     id="new_password" 
+                     name="new_password" 
+                     required
+                     pattern="^[A-Z](?=.*\d)[A-Za-z\d]{7,}$"
+                     title="Password must be at least 8 characters, start with a capital letter, and contain at least one number.">
               <button type="button" class="btn btn-outline-secondary" onclick="toggleNewPassword()" title="Show/Hide New Password">
                 <i class="bi bi-eye" id="newToggleIcon"></i>
               </button>
