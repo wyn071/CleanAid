@@ -65,10 +65,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_password'])) {
         <h5 class="card-title">User Information</h5>
 
         <?php if (isset($error)): ?>
-          <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php elseif (isset($success)): ?>
-          <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
-        <?php endif; ?>
+  <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <?= htmlspecialchars($error) ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<?php elseif (isset($success)): ?>
+  <div class="alert alert-success alert-dismissible fade show" role="alert">
+    <?= htmlspecialchars($success) ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<?php endif; ?>
 
         <!-- User Info -->
         <form>
