@@ -13,11 +13,6 @@
   </div>
 </footer>
 
-<a href="#" class="back-to-top d-flex align-items-center justify-content-center"
-   style="background-color: #CE1126;">
-  <i class="bi bi-arrow-up-short text-white"></i>
-</a>
-
 <!-- Vendor JS Files -->
 <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
