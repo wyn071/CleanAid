@@ -63,8 +63,8 @@ if (isset($_POST['registration'])) {
     $name = mysqli_real_escape_string($conn, $name);
     $email = mysqli_real_escape_string($conn, $email);
 
-    // Hash password
-    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+    // ❌ No hashing (store password as-is)
+    $plainPassword = $password;
 
     // ✅ Check if email already exists
     $query = "SELECT email FROM user WHERE email = '$email'";
@@ -82,9 +82,9 @@ if (isset($_POST['registration'])) {
     // Default role
     $role = 'admin';
 
-    // ✅ Insert user data into the database
+    // ✅ Insert user data into the database (password in plain text)
     $query = "INSERT INTO `user` (`name`, `email`, `password`, `role`) 
-              VALUES ('$name', '$email', '$hashedPassword', '$role')";
+              VALUES ('$name', '$email', '$plainPassword', '$role')";
 
     if (mysqli_query($conn, $query)) {
         // Clear old values on success
