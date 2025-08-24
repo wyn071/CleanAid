@@ -59,6 +59,37 @@ function run_python_analysis(array $rows): array {
     return $data;
 }
 
+/* ---------------- Save flagged rows to DB ---------------- */
+function save_flagged_rows(mysqli $conn, int $listId, array $flagged): void {
+    if (empty($flagged)) return;
+
+    // kuhaon ang processing_id para sa list_id
+    $processingId = null;
+    $stmt = $conn->prepare("SELECT processing_id FROM processing_engine WHERE list_id = ? ORDER BY processing_id DESC LIMIT 1");
+    $stmt->bind_param("i", $listId);
+    $stmt->execute();
+    $stmt->bind_result($processingId);
+    $stmt->fetch();
+    $stmt->close();
+
+    if (!$processingId) return;
+
+    // delete old flagged for this processing_id
+    $del = $conn->prepare("DELETE FROM duplicaterecord WHERE processing_id = ?");
+    $del->bind_param("i", $processingId);
+    $del->execute();
+    $del->close();
+
+    // insert new flagged
+    $stmt = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?,?,?,?)");
+    foreach ($flagged as $r) {
+        $status = 'unresolved';
+        $stmt->bind_param("iiss", $r['beneficiary_id'], $processingId, $r['reason'], $status);
+        $stmt->execute();
+    }
+    $stmt->close();
+}
+
 /* SINGLE-label reasons: Missing > Exact > Possible > Sounds-Like */
 function build_flagged_rows(array $rows, array $data): array {
     $rows = array_values($rows);
@@ -120,8 +151,16 @@ if (isset($_GET['download'], $_GET['list_id']) && $_GET['download']==='1' && cty
     $data    = run_python_analysis($rows);
     $flagged = is_array($data) ? build_flagged_rows($rows, $data) : [];
 
+    // save flagged to db
+    save_flagged_rows($conn, $dl, $flagged);
+
+    // kuhaa ang original filename gikan sa DB
+    $fileName = fetch_filename_for_list($conn, $dl);
+    // sanitize filename (kay basin naay spaces o special chars)
+    $safeName = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $fileName);
+
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=flagged_records_'.$dl.'.csv');
+    header('Content-Disposition: attachment; filename='.$safeName.'_flagged.csv');
     $out = fopen('php://output','w');
     fputcsv($out, ['beneficiary_id','list_id','full_name','birth_date','region','province','city','barangay','marital_status','reason']);
     foreach ($flagged as $r) {
@@ -144,12 +183,19 @@ foreach($lists as $listIdRaw){
         $sections[]=['list_id'=>$listId,'fileName'=>$fileName,'summary'=>['total_records'=>count($rows),'exact_duplicates_count'=>0,'fuzzy_duplicates_count'=>0,'sounds_like_count'=>0],'flagged'=>[],'error'=>$data['error']??'Analysis failed.'];
         continue;
     }
-    $sections[]=['list_id'=>$listId,'fileName'=>$fileName,'summary'=>$data['summary'],'flagged'=>build_flagged_rows($rows,$data),'error'=>null];
+
+    $flagged = build_flagged_rows($rows,$data);
+
+    // save flagged to db
+    save_flagged_rows($conn, $listId, $flagged);
+
+    $sections[]=['list_id'=>$listId,'fileName'=>$fileName,'summary'=>$data['summary'],'flagged'=>$flagged,'error'=>null];
 }
 ?>
 <?php include("./includes/header.php"); ?>
 <?php include("./includes/topbar.php"); ?>
 <?php include("./includes/sidebar.php"); ?>
+
 
 <style>
   /* --- kill the big gradient strips that "cut" the page --- */
