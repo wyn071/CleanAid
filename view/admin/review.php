@@ -63,7 +63,7 @@ function run_python_analysis(array $rows): array {
 function save_flagged_rows(mysqli $conn, int $listId, array $flagged): void {
     if (empty($flagged)) return;
 
-    // kuhaon ang processing_id para sa list_id
+    // get the latest processing_id for the list_id
     $processingId = null;
     $stmt = $conn->prepare("SELECT processing_id FROM processing_engine WHERE list_id = ? ORDER BY processing_id DESC LIMIT 1");
     $stmt->bind_param("i", $listId);
@@ -144,58 +144,92 @@ function build_flagged_rows(array $rows, array $data): array {
     return $out;
 }
 
-/* --------------------------- CSV download --------------------------- */
-if (isset($_GET['download'], $_GET['list_id']) && $_GET['download']==='1' && ctype_digit($_GET['list_id'])) {
-    $dl = (int)$_GET['list_id'];
-    $rows    = fetch_rows_for_list($conn, $dl);
-    $data    = run_python_analysis($rows);
-    $flagged = is_array($data) ? build_flagged_rows($rows, $data) : [];
+/* ----------------------- Combined CSV download (ALL) ----------------------- */
+if (isset($_GET['download']) && $_GET['download']==='1') {
+    $listIds = $lists; // from session
+    $combined = [];
 
-    // save flagged to db
-    save_flagged_rows($conn, $dl, $flagged);
+    foreach ($listIds as $idRaw) {
+        if (!ctype_digit((string)$idRaw)) continue;
+        $lid = (int)$idRaw;
 
-    // kuhaa ang original filename gikan sa DB
-    $fileName = fetch_filename_for_list($conn, $dl);
-    // sanitize filename (kay basin naay spaces o special chars)
-    $safeName = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $fileName);
+        $rows    = fetch_rows_for_list($conn, $lid);
+        $data    = run_python_analysis($rows);
+        $flagged = is_array($data) ? build_flagged_rows($rows, $data) : [];
 
+        // still save to DB per list
+        save_flagged_rows($conn, $lid, $flagged);
+
+        // add fileName so CSV shows origin
+        $fileName = fetch_filename_for_list($conn, $lid);
+        foreach ($flagged as &$r) { $r['source_file'] = $fileName; }
+        unset($r);
+
+        $combined = array_merge($combined, $flagged);
+    }
+
+    $safeName = 'all_lists_flagged_' . date('Ymd_His');
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename='.$safeName.'_flagged.csv');
+    header('Content-Disposition: attachment; filename='.$safeName.'.csv');
     $out = fopen('php://output','w');
-    fputcsv($out, ['beneficiary_id','list_id','full_name','birth_date','region','province','city','barangay','marital_status','reason']);
-    foreach ($flagged as $r) {
-        fputcsv($out, [$r['beneficiary_id'],$r['list_id'],$r['full_name'],$r['birth_date'],$r['region'],$r['province'],$r['city'],$r['barangay'],$r['marital_status'],$r['reason']]);
+    fputcsv($out, ['beneficiary_id','list_id','source_file','full_name','birth_date','region','province','city','barangay','marital_status','reason']);
+    foreach ($combined as $r) {
+        fputcsv($out, [
+            $r['beneficiary_id'],$r['list_id'],$r['source_file'] ?? '',
+            $r['full_name'],$r['birth_date'],$r['region'],$r['province'],
+            $r['city'],$r['barangay'],$r['marital_status'],$r['reason']
+        ]);
     }
     fclose($out);
     exit;
 }
 
-/* ----------------------- Build sections to render ----------------------- */
-$sections=[];
-foreach($lists as $listIdRaw){
-    if(!ctype_digit((string)$listIdRaw)) continue;
-    $listId=(int)$listIdRaw;
-    $fileName=fetch_filename_for_list($conn,$listId);
-    $rows=fetch_rows_for_list($conn,$listId);
-    $data=run_python_analysis($rows);
+/* ------------------- Process ALL lists and aggregate ------------------- */
+$overall = [
+    'total_records' => 0,
+    'exact_duplicates_count' => 0,
+    'fuzzy_duplicates_count' => 0,
+    'sounds_like_count' => 0,
+];
+$allFlagged = [];
+$perList = []; // for small per-list chips if you want to show
 
-    if(!is_array($data) || isset($data['error'])){
-        $sections[]=['list_id'=>$listId,'fileName'=>$fileName,'summary'=>['total_records'=>count($rows),'exact_duplicates_count'=>0,'fuzzy_duplicates_count'=>0,'sounds_like_count'=>0],'flagged'=>[],'error'=>$data['error']??'Analysis failed.'];
+foreach ($lists as $listIdRaw) {
+    if (!ctype_digit((string)$listIdRaw)) continue;
+    $listId   = (int)$listIdRaw;
+    $fileName = fetch_filename_for_list($conn, $listId);
+    $rows     = fetch_rows_for_list($conn, $listId);
+    $data     = run_python_analysis($rows);
+
+    if (!is_array($data) || isset($data['error'])) {
+        // still add counts we can
+        $perList[] = ['list_id'=>$listId, 'fileName'=>$fileName, 'error'=>$data['error'] ?? 'Analysis failed.', 'summary'=>['total_records'=>count($rows),'exact_duplicates_count'=>0,'fuzzy_duplicates_count'=>0,'sounds_like_count'=>0]];
+        $overall['total_records'] += count($rows);
         continue;
     }
 
-    $flagged = build_flagged_rows($rows,$data);
+    $summary = $data['summary'] ?? ['total_records'=>count($rows),'exact_duplicates_count'=>0,'fuzzy_duplicates_count'=>0,'sounds_like_count'=>0];
+    $flagged = build_flagged_rows($rows, $data);
 
-    // save flagged to db
+    // Save to DB per list
     save_flagged_rows($conn, $listId, $flagged);
 
-    $sections[]=['list_id'=>$listId,'fileName'=>$fileName,'summary'=>$data['summary'],'flagged'=>$flagged,'error'=>null];
+    // Tag each flagged with source filename
+    foreach ($flagged as &$r) { $r['source_file'] = $fileName; }
+    unset($r);
+
+    $allFlagged = array_merge($allFlagged, $flagged);
+    $overall['total_records']             += (int)($summary['total_records'] ?? 0);
+    $overall['exact_duplicates_count']    += (int)($summary['exact_duplicates_count'] ?? 0);
+    $overall['fuzzy_duplicates_count']    += (int)($summary['fuzzy_duplicates_count'] ?? 0);
+    $overall['sounds_like_count']         += (int)($summary['sounds_like_count'] ?? 0);
+
+    $perList[] = ['list_id'=>$listId,'fileName'=>$fileName,'error'=>null,'summary'=>$summary];
 }
 ?>
 <?php include("./includes/header.php"); ?>
 <?php include("./includes/topbar.php"); ?>
 <?php include("./includes/sidebar.php"); ?>
-
 
 <style>
   /* --- kill the big gradient strips that "cut" the page --- */
@@ -206,95 +240,98 @@ foreach($lists as $listIdRaw){
 .content::after { content: none !important; display: none !important; }
 
 /* --- WIDTH of your sidebar (adjust if yours is 256px) --- */
-:root { --sidebar-w: 250px; }  /* change to 256px if your sidebar is 256 */
+:root { --sidebar-w: 250px; }
 
-/* Desktop: keep content pushed to the right of the sidebar */
+/* Desktop */
 @media (min-width: 992px) {
   .main-sidebar { width: var(--sidebar-w) !important; }
-  .main-header, .content-wrapper, .main-footer {
-    margin-left: var(--sidebar-w) !important;
-  }
-
-  /* AdminLTE variants */
+  .main-header, .content-wrapper, .main-footer { margin-left: var(--sidebar-w) !important; }
   body.sidebar-mini:not(.sidebar-collapse) .content-wrapper,
-  body:not(.sidebar-collapse) .content-wrapper {
-    margin-left: var(--sidebar-w) !important;
-  }
+  body:not(.sidebar-collapse) .content-wrapper { margin-left: var(--sidebar-w) !important; }
 }
 
-/* Mobile/tablet: overlay sidebar, content should be full width */
+/* Mobile/tablet */
 @media (max-width: 991.98px) {
   .main-header, .content-wrapper, .main-footer { margin-left: 0 !important; }
 }
 
-/* Optional: keep content nicely spaced on large screens */
 .review-page { max-width: 1180px; padding: 18px 12px 28px; margin: 0 auto; }
+.page-title  { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
 
-  .page-title  { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+.ca-card  { border: 1px solid #e5e7eb; border-radius: 10px; background:#fff; }
+.ca-body  { padding: 16px; }
+.chip     { display:inline-block; font-size:.75rem; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:999px; }
+.sum-list { margin: 6px 0 0; padding-left: 18px; }
+.sum-list li { margin: 2px 0; }
 
-  .ca-card  { border: 1px solid #e5e7eb; border-radius: 10px; background:#fff; }
-  .ca-body  { padding: 16px; }
-  .chip     { display:inline-block; font-size:.75rem; background:#f3f4f6; color:#374151; padding:4px 8px; border-radius:999px; }
-  .sum-list { margin: 6px 0 0; padding-left: 18px; }
-  .sum-list li { margin: 2px 0; }
+.table-wrap { border:1px solid #e5e7eb; border-radius:8px; overflow:auto; }
+.table-sm th, .table-sm td { padding:.45rem .6rem; font-size:.875rem; }
+.table thead th { background:#f9fafb; position:sticky; top:0; z-index:1; }
 
-  .table-wrap { border:1px solid #e5e7eb; border-radius:8px; overflow:auto; }
-  .table-sm th, .table-sm td { padding:.45rem .6rem; font-size:.875rem; }
-  .table thead th { background:#f9fafb; position:sticky; top:0; z-index:1; }
+.card-footer { padding:10px 16px; border-top:1px solid #e5e7eb; background:#fafafa;
+               border-bottom-left-radius:10px; border-bottom-right-radius:10px; }
 
-  .card-footer { padding:10px 16px; border-top:1px solid #e5e7eb; background:#fafafa;
-                 border-bottom-left-radius:10px; border-bottom-right-radius:10px; }
+.mb-14 { margin-bottom:14px; }
+.mb-28 { margin-bottom:28px; }
 
-  /* Tighten vertical rhythm */
-  .mb-14 { margin-bottom:14px; }
-  .mb-28 { margin-bottom:28px; }
+.badge-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.badge { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:999px; padding:3px 8px; font-size:.72rem; }
+.alert-tight { padding:8px 10px; margin:6px 0 0; }
 </style>
 
 <div class="content-wrapper">
   <section class="content">
     <div class="container-fluid review-page">
-      <div class="page-title">Review Summary</div>
+      <div class="page-title">Review Summary (All Lists)</div>
 
-      <?php if (empty($sections)): ?>
+      <?php if (empty($lists)): ?>
         <div class="ca-card"><div class="ca-body">No uploaded lists found or processing failed.</div></div>
-      <?php endif; ?>
+      <?php else: ?>
 
-      <?php foreach ($sections as $sec): ?>
-        <!-- SUMMARY -->
+        <!-- ONE SUMMARY FOR ALL -->
         <div class="ca-card mb-14">
           <div class="ca-body">
             <div class="d-flex align-items-center" style="gap:8px;">
               <span class="chip">Summary</span>
-              <small><?= htmlspecialchars($sec['fileName']) ?></small>
+              <small>Combined across <?= count($lists) ?> list(s)</small>
             </div>
-            <?php if (!empty($sec['error'])): ?>
-              <div class="alert alert-warning mt-2 mb-0"><?= htmlspecialchars($sec['error']) ?></div>
-            <?php else: ?>
-              <ul class="sum-list">
-                <li><strong>Total Records Processed:</strong> <?= (int)($sec['summary']['total_records'] ?? 0) ?></li>
-                <li><strong>Exact Duplicates:</strong> <?= (int)($sec['summary']['exact_duplicates_count'] ?? 0) ?></li>
-                <li><strong>Possible Duplicates:</strong> <?= (int)($sec['summary']['fuzzy_duplicates_count'] ?? 0) ?></li>
-                <li><strong>Sounds-Like Duplicates:</strong> <?= (int)($sec['summary']['sounds_like_count'] ?? 0) ?></li>
-              </ul>
-            <?php endif; ?>
+            <ul class="sum-list">
+              <li><strong>Total Records Processed:</strong> <?= (int)$overall['total_records'] ?></li>
+              <li><strong>Exact Duplicates:</strong> <?= (int)$overall['exact_duplicates_count'] ?></li>
+              <li><strong>Possible Duplicates:</strong> <?= (int)$overall['fuzzy_duplicates_count'] ?></li>
+              <li><strong>Sounds-Like Duplicates:</strong> <?= (int)$overall['sounds_like_count'] ?></li>
+            </ul>
+
+            <!-- Optional: show small per-list chips -->
+            <div class="badge-list">
+              <?php foreach ($perList as $pl): ?>
+                <span class="badge" title="List ID: <?= (int)$pl['list_id'] ?>">
+                  <?= htmlspecialchars($pl['fileName']) ?>
+                  <?php if (!empty($pl['error'])): ?> — error<?php endif; ?>
+                </span>
+              <?php endforeach; ?>
+            </div>
           </div>
         </div>
 
-        <!-- FLAGGED -->
+        <!-- ONE FLAGGED TABLE FOR ALL -->
         <div class="ca-card mb-28">
           <div class="ca-body">
             <div class="d-flex align-items-center mb-2" style="gap:8px;">
               <span class="chip">Flagged Records</span>
-              <small><?= htmlspecialchars($sec['fileName']) ?></small>
+              <small>Combined</small>
             </div>
-            <?php if (empty($sec['flagged'])): ?>
-              <div class="alert alert-success mb-0">No issues found 🎉</div>
+
+            <?php if (empty($allFlagged)): ?>
+              <div class="alert alert-success alert-tight mb-0">No issues found 🎉</div>
             <?php else: ?>
               <div class="table-wrap">
                 <table class="table table-sm table-hover align-middle mb-0">
                   <thead>
                     <tr>
                       <th>Beneficiary ID</th>
+                      <th>List ID</th>
+                      <th>Source File</th>
                       <th>Full Name</th>
                       <th>Birth Date</th>
                       <th>Region</th>
@@ -306,19 +343,21 @@ foreach($lists as $listIdRaw){
                     </tr>
                   </thead>
                   <tbody>
-                  <?php foreach ($sec['flagged'] as $r): ?>
-                    <tr>
-                      <td><?= htmlspecialchars($r['beneficiary_id']) ?></td>
-                      <td><?= htmlspecialchars($r['full_name']) ?></td>
-                      <td><?= htmlspecialchars($r['birth_date']) ?></td>
-                      <td><?= htmlspecialchars($r['region']) ?></td>
-                      <td><?= htmlspecialchars($r['province']) ?></td>
-                      <td><?= htmlspecialchars($r['city']) ?></td>
-                      <td><?= htmlspecialchars($r['barangay']) ?></td>
-                      <td><?= htmlspecialchars($r['marital_status']) ?></td>
-                      <td><?= htmlspecialchars($r['reason']) ?></td>
-                    </tr>
-                  <?php endforeach; ?>
+                    <?php foreach ($allFlagged as $r): ?>
+                      <tr>
+                        <td><?= htmlspecialchars($r['beneficiary_id']) ?></td>
+                        <td><?= htmlspecialchars($r['list_id']) ?></td>
+                        <td><?= htmlspecialchars($r['source_file'] ?? '') ?></td>
+                        <td><?= htmlspecialchars($r['full_name']) ?></td>
+                        <td><?= htmlspecialchars($r['birth_date']) ?></td>
+                        <td><?= htmlspecialchars($r['region']) ?></td>
+                        <td><?= htmlspecialchars($r['province']) ?></td>
+                        <td><?= htmlspecialchars($r['city']) ?></td>
+                        <td><?= htmlspecialchars($r['barangay']) ?></td>
+                        <td><?= htmlspecialchars($r['marital_status']) ?></td>
+                        <td><?= htmlspecialchars($r['reason']) ?></td>
+                      </tr>
+                    <?php endforeach; ?>
                   </tbody>
                 </table>
               </div>
@@ -326,12 +365,14 @@ foreach($lists as $listIdRaw){
           </div>
 
           <div class="card-footer">
-            <a class="btn btn-sm btn-outline-primary" href="?download=1&list_id=<?= (int)$sec['list_id'] ?>">
-              Download Flagged Records
+            <!-- one combined download (no list_id needed) -->
+            <a class="btn btn-sm btn-outline-primary" href="?download=1">
+              Download All Flagged Records
             </a>
           </div>
         </div>
-      <?php endforeach; ?>
+
+      <?php endif; ?>
 
     </div>
   </section>
