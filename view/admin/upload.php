@@ -1,7 +1,9 @@
+<?php
+session_start(); ?>
+
 <?php include("./includes/header.php"); ?>
 <?php include("./includes/topbar.php"); ?>
 <?php include("./includes/sidebar.php"); ?>
-<?php session_start(); ?>
 
 <main class="main bg-body-tertiary" style="min-height: 100vh;">
   <section class="container py-5">
