@@ -10,8 +10,8 @@ session_start(); ?>
     <h2 class="fw-bold">Data Upload</h2>
     <p class="text-muted">Upload your file/s for beneficiary data processing</p>
 
-    <form method="POST" enctype="multipart/form-data" action="../../controller/upload_process.php" id="uploadForm">
-      <!-- Dropzone (visible only before selecting files) -->
+    <form id="uploadForm">
+      <!-- Dropzone -->
       <div id="dropZone" class="border rounded-4 text-center p-5 shadow-sm"
            style="border: 2px dashed #ccc; cursor: pointer;">
         <input type="file" id="fileInput" name="file[]" accept=".csv,.xls,.xlsx" multiple hidden>
@@ -29,11 +29,27 @@ session_start(); ?>
   </section>
 </main>
 
+<!-- Fullscreen Loading Overlay -->
+<div id="loadingOverlay">
+  <div class="loader-container">
+    <div class="spinner"></div>
+    <p class="loading-text">Preparing upload...</p>
+    <div class="progress-wrapper">
+      <div id="progressBar"></div>
+    </div>
+    <p id="progressPercent">0%</p>
+  </div>
+</div>
+
 <script>
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
   const previewContainer = document.getElementById('previewContainer');
   const uploadBtn = document.getElementById('uploadBtn');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const progressBar = document.getElementById('progressBar');
+  const progressPercent = document.getElementById('progressPercent');
+  const loadingText = document.querySelector('.loading-text');
 
   let selectedFiles = [];
 
@@ -62,14 +78,51 @@ session_start(); ?>
   });
 
   document.getElementById('uploadForm').addEventListener('submit', function (e) {
-    const dt = new DataTransfer();
-    selectedFiles.forEach(file => dt.items.add(file));
-    fileInput.files = dt.files;
+    e.preventDefault();
 
     if (selectedFiles.length === 0) {
-      e.preventDefault();
       alert("❌ No files selected.");
+      return;
     }
+
+    // Show loading overlay
+    loadingOverlay.style.display = 'flex';
+    progressBar.style.width = '0%';
+    progressPercent.innerText = '0%';
+    loadingText.innerText = 'Uploading...';
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append('file[]', file));
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        progressBar.style.width = percent + "%";
+        progressPercent.innerText = percent + "%";
+      }
+    });
+
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        loadingText.innerText = "✅ Upload complete! Redirecting...";
+        setTimeout(() => {
+          window.location.href = "../admin/clean.php";
+        }, 1000);
+      } else {
+        alert("❌ Upload failed.");
+        loadingOverlay.style.display = 'none';
+      }
+    };
+
+    xhr.onerror = function () {
+      alert("⚠️ Upload error.");
+      loadingOverlay.style.display = 'none';
+    };
+
+    xhr.open('POST', '../../controller/upload_process.php', true);
+    xhr.send(formData);
   });
 
   function renderFilePreview() {
@@ -79,7 +132,6 @@ session_start(); ?>
 
     uploadBtn.disabled = selectedFiles.length === 0;
 
-    // Toggle visibility
     if (selectedFiles.length > 0) {
       dropZone.style.display = 'none';
       previewContainer.style.display = 'flex';
@@ -89,7 +141,6 @@ session_start(); ?>
     }
 
     previewContainer.innerHTML = '';
-
     selectedFiles.forEach((file, index) => {
       const ext = file.name.split('.').pop();
       const card = document.createElement('div');
@@ -129,6 +180,7 @@ session_start(); ?>
 </script>
 
 <style>
+  /* File preview styles (same as before) */
   .file-preview-row {
     display: flex;
     flex-wrap: wrap;
@@ -139,7 +191,6 @@ session_start(); ?>
     border-radius: 15px;
     background: #fff;
   }
-
   .file-card {
     width: 100px;
     padding: 15px 10px;
@@ -148,20 +199,17 @@ session_start(); ?>
     border-radius: 10px;
     position: relative;
   }
-
   .file-card img {
     width: 40px;
     height: 40px;
     margin-bottom: 5px;
   }
-
   .filename {
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
   .remove-btn {
     position: absolute;
     top: 4px;
@@ -175,7 +223,6 @@ session_start(); ?>
     border-radius: 50%;
     cursor: pointer;
   }
-
   .add-btn-card {
     display: flex;
     align-items: center;
@@ -189,9 +236,63 @@ session_start(); ?>
     color: #888;
     cursor: pointer;
   }
-
   .add-btn-card:hover {
     background: #e9e9e9;
+  }
+
+  /* Loading overlay styles */
+  #loadingOverlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    flex-direction: column;
+  }
+  .loader-container {
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+  }
+  .spinner {
+    width: 60px;
+    height: 60px;
+    border: 6px solid #ddd;
+    border-top: 6px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: auto;
+  }
+  .loading-text {
+    margin: 15px 0;
+    font-size: 18px;
+    color: #333;
+    font-weight: 500;
+  }
+  .progress-wrapper {
+    width: 100%;
+    height: 12px;
+    background: #eee;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 10px 0;
+  }
+  #progressBar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #007bff, #00c6ff);
+    transition: width 0.3s ease;
+  }
+  #progressPercent {
+    font-size: 14px;
+    font-weight: 600;
+    color: #007bff;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
 
