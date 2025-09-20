@@ -11,7 +11,7 @@ $lists = $_SESSION['uploaded_lists'] ?? [];
 
 <main class="main bg-body-tertiary" style="min-height: 100vh;">
   <section class="container py-5">
-    <h2 class="fw-bold">Clean Data</h2>
+    <h2 class="fw-bold">Clean Data SHIT</h2>
     <p class="text-muted">Run data cleansing to detect duplicates and inconsistencies in your uploaded data.</p>
 
     <!-- Uploaded Files -->
