@@ -2,7 +2,18 @@
 session_start();
 include('../../dB/config.php');
 
+// Lists uploaded in this session (array of list_id integers)
 $lists = $_SESSION['uploaded_lists'] ?? [];
+
+// Helper to fetch file name for each list
+function getListFileName(mysqli $conn, $listId) {
+  $listId = (int)$listId;
+  $res = mysqli_query($conn, "SELECT fileName FROM beneficiarylist WHERE list_id = {$listId} LIMIT 1");
+  if ($res && $row = mysqli_fetch_assoc($res)) {
+    return $row['fileName'];
+  }
+  return "List #{$listId}";
+}
 ?>
 
 <?php include("./includes/header.php"); ?>
@@ -16,17 +27,21 @@ $lists = $_SESSION['uploaded_lists'] ?? [];
 
     <!-- Uploaded Files -->
     <div class="card shadow-sm border-0 rounded-4 p-4 mb-4 w-100">
-      <h5 class="fw-semibold mb-3">Uploaded Files</h5>
+      <div class="d-flex align-items-center justify-content-between">
+        <h5 class="fw-semibold mb-3">Uploaded Files</h5>
+        <?php if (!empty($lists)): ?>
+          <span class="badge text-bg-light"><?= count($lists) ?> file(s)</span>
+        <?php endif; ?>
+      </div>
 
       <?php if (!empty($lists)): ?>
         <ul class="list-group list-group-flush mb-3">
-          <?php foreach ($lists as $listId): 
-            $res = mysqli_query($conn, "SELECT fileName FROM beneficiarylist WHERE list_id='$listId'");
-            $row = mysqli_fetch_assoc($res);
-          ?>
-            <li class="list-group-item d-flex align-items-center">
-              <img src="https://cdn-icons-png.flaticon.com/512/4725/4725976.png" alt="xls icon" width="24" class="me-2">
-              <span><?= htmlspecialchars($row['fileName'] ?? "List #$listId") ?></span>
+          <?php foreach ($lists as $listId): ?>
+            <?php $fileLabel = getListFileName($conn, $listId); ?>
+            <li class="list-group-item d-flex align-items-center gap-2">
+              <img src="https://cdn-icons-png.flaticon.com/512/4725/4725976.png" alt="xls icon" width="24">
+              <span class="me-auto"><?= htmlspecialchars($fileLabel) ?></span>
+              <code class="text-muted">list_id: <?= (int)$listId ?></code>
             </li>
           <?php endforeach; ?>
         </ul>
@@ -39,7 +54,7 @@ $lists = $_SESSION['uploaded_lists'] ?? [];
     <!-- Start Cleaning Button -->
     <?php if (!empty($lists)): ?>
       <div class="text-center">
-        <button type="button" class="btn btn-success px-4 rounded-pill" onclick="startCleaning()">
+        <button id="startCleaningBtn" type="button" class="btn btn-success px-4 rounded-pill">
           Start Cleaning
         </button>
       </div>
@@ -56,6 +71,7 @@ $lists = $_SESSION['uploaded_lists'] ?? [];
       <div id="cleanProgressBar"></div>
     </div>
     <p id="cleanProgressPercent">0%</p>
+    <div class="mt-2 small text-muted" id="cleanExtraHint"></div>
   </div>
 </div>
 
@@ -72,87 +88,160 @@ $lists = $_SESSION['uploaded_lists'] ?? [];
   flex-direction: column;
 }
 
-.loader-container {
-  text-align: center;
-  max-width: 400px;
-  width: 100%;
-}
+.loader-container { text-align: center; max-width: 400px; width: 100%; }
 
 .spinner {
-  width: 60px;
-  height: 60px;
+  width: 60px; height: 60px;
   border: 6px solid #ddd;
-  border-top: 6px solid #dc3545; /* 🔴 Bootstrap danger red */
+  border-top: 6px solid #dc3545;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: auto;
 }
 
-.loading-text {
-  margin: 15px 0;
-  font-size: 18px;
-  color: #333;
-  font-weight: 500;
-}
+.loading-text { margin: 15px 0; font-size: 18px; color: #333; font-weight: 500; }
 
 .progress-wrapper {
-  width: 100%;
-  height: 12px;
-  background: #eee;
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 10px 0;
+  width: 100%; height: 12px; background: #eee;
+  border-radius: 8px; overflow: hidden; margin: 10px 0;
 }
 
 #cleanProgressBar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #dc3545, #ff6b6b); 
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #dc3545, #ff6b6b);
   transition: width 0.3s ease;
 }
 
-#cleanProgressPercent {
-  font-size: 14px;
-  font-weight: 600;
-  color: #dc3545; /* 🔴 Matches spinner color */
-}
+#cleanProgressPercent { font-size: 14px; font-weight: 600; color: #dc3545; }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
 <script>
-function startCleaning() {
-  document.getElementById('cleaningOverlay').style.display = 'flex';
+// Lists to process (from PHP session)
+const listsToProcess = <?php echo json_encode(array_values($lists)); ?>;
 
-  // tell PHP to start cleaning
-  fetch('../../controller/clean_process.php?start=1')
-    .then(() => {
-      let progressInterval = setInterval(() => {
-        fetch('../../controller/clean_process.php?progress=1')
-          .then(res => res.json())
-          .then(data => {
-            if (!data || typeof data.percent === "undefined") return;
-
-            const percent = data.percent;
-            document.getElementById('cleanProgressBar').style.width = percent + "%";
-            document.getElementById('cleanProgressPercent').innerText = percent + "%";
-            document.querySelector('#cleaningOverlay .loading-text').innerText = data.message;
-
-            if (percent >= 100) {
-              clearInterval(progressInterval);
-              document.querySelector('#cleaningOverlay .loading-text').innerText = "✅ Cleaning complete! Redirecting...";
-              setTimeout(() => {
-                window.location.href = "review.php";
-              }, 1000);
-            }
-          })
-          .catch(err => console.error("Progress error:", err));
-      }, 1000);
-    })
-    .catch(err => console.error("Start error:", err));
+// Overlay UI helpers
+function showOverlay() {
+  const el = document.getElementById('cleaningOverlay');
+  if (el) el.style.display = 'flex';
+  setProgress(0, 'Starting cleaning...');
 }
-</script>
 
-<?php include("./includes/footer.php"); ?>
+function hideOverlay() {
+  const el = document.getElementById('cleaningOverlay');
+  if (el) el.style.display = 'none';
+}
+
+function setProgress(percent, message, hint) {
+  const bar = document.getElementById('cleanProgressBar');
+  const pct = document.getElementById('cleanProgressPercent');
+  const txt = document.querySelector('.loading-text');
+  const hintEl = document.getElementById('cleanExtraHint');
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (bar) bar.style.width = p + '%';
+  if (pct) pct.textContent = p + '%';
+  if (txt && message) txt.textContent = message;
+  if (hintEl) hintEl.textContent = hint || '';
+}
+
+// Kick a run (idempotent)
+async function startRunForList(listId) {
+  await fetch('clean_process.php?list_id=' + encodeURIComponent(listId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'start', list_id: listId })
+  }).catch(() => {});
+}
+
+// Poll once
+async function pollRun(listId) {
+  const r = await fetch('clean_process.php?progress=1&list_id=' + encodeURIComponent(listId), { cache: 'no-store' });
+  let data;
+  try {
+    data = await r.json();
+  } catch (e) {
+    throw new Error('Invalid JSON from clean_process.php');
+  }
+  return data;
+}
+
+// Process one list end-to-end
+async function processOneList(listId, index, totalLists) {
+  await startRunForList(listId);
+
+  while (true) {
+    const data = await pollRun(listId);
+
+    if (data.status === 'error') {
+      setProgress(100, `❌ Error on list ${listId}`, data.message || 'See server logs');
+      throw new Error(data.message || 'Cleaning error');
+    }
+
+    // Prefer processed/total (if provided); else fallback to percent
+    let percent = 0;
+    let msg = `Processing list ${index}/${totalLists}`;
+    let hint = '';
+
+    if (typeof data.total === 'number' && typeof data.processed === 'number' && data.total > 0) {
+      percent = Math.floor((data.processed / data.total) * 100);
+      hint = `${data.processed.toLocaleString()} / ${data.total.toLocaleString()} rows`;
+    } else if (typeof data.percent === 'number') {
+      percent = data.percent;
+    }
+
+    setProgress(percent, msg, hint);
+
+    if (data.status === 'complete' || percent >= 100) {
+      setProgress(100, `✅ List ${index}/${totalLists} complete`);
+      return;
+    }
+
+    // gentle polling
+    await new Promise(res => setTimeout(res, 800));
+  }
+}
+
+// Orchestrate all lists sequentially
+async function startCleaningAll() {
+  if (!listsToProcess || !listsToProcess.length) {
+    alert('No uploaded lists to clean.');
+    return;
+  }
+
+  showOverlay();
+
+  const btn = document.getElementById('startCleaningBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const totalLists = listsToProcess.length;
+    for (let i = 0; i < totalLists; i++) {
+      const listId = listsToProcess[i];
+      await processOneList(listId, i + 1, totalLists);
+    }
+
+    // redirect to review for the last processed list
+    const lastListId = listsToProcess[listsToProcess.length - 1];
+    setProgress(100, '🎉 Cleaning complete! Redirecting to review…');
+    setTimeout(() => {
+      window.location.href = 'review.php?list_id=' + encodeURIComponent(lastListId);
+    }, 900);
+
+  } catch (e) {
+    console.error(e);
+    alert('Cleaning failed: ' + (e.message || 'Check console/logs'));
+  } finally {
+    // keep overlay visible until redirect (comment next line if you prefer hiding on error)
+    // hideOverlay();
+    const btn2 = document.getElementById('startCleaningBtn');
+    if (btn2) btn2.disabled = false;
+  }
+}
+
+// Wire up button
+document.addEventListener('DOMContentLoaded', () => {
+  const startBtn = document.getElementById('startCleaningBtn');
+  if (startBtn) startBtn.addEventListener('click', startCleaningAll);
+});
+</script>
