@@ -2,8 +2,14 @@
 session_start();
 include('../../dB/config.php');
 
-// Lists uploaded in this session (array of list_id integers)
-$lists = $_SESSION['uploaded_lists'] ?? [];
+// Prefer ?lists= param over session
+if (isset($_GET['lists'])) {
+  $lists = array_filter(array_map('intval', explode(',', $_GET['lists'])));
+  // ✅ store to session para consistent
+  $_SESSION['uploaded_lists'] = $lists;
+} else {
+  $lists = $_SESSION['uploaded_lists'] ?? [];
+}
 
 // Helper to fetch file name for each list
 function getListFileName(mysqli $conn, $listId) {
@@ -87,9 +93,7 @@ function getListFileName(mysqli $conn, $listId) {
   z-index: 9999;
   flex-direction: column;
 }
-
 .loader-container { text-align: center; max-width: 400px; width: 100%; }
-
 .spinner {
   width: 60px; height: 60px;
   border: 6px solid #ddd;
@@ -98,144 +102,115 @@ function getListFileName(mysqli $conn, $listId) {
   animation: spin 1s linear infinite;
   margin: auto;
 }
-
 .loading-text { margin: 15px 0; font-size: 18px; color: #333; font-weight: 500; }
-
 .progress-wrapper {
   width: 100%; height: 12px; background: #eee;
   border-radius: 8px; overflow: hidden; margin: 10px 0;
 }
-
 #cleanProgressBar {
   height: 100%; width: 0%;
   background: linear-gradient(90deg, #dc3545, #ff6b6b);
   transition: width 0.3s ease;
 }
-
 #cleanProgressPercent { font-size: 14px; font-weight: 600; color: #dc3545; }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
 <script>
-// Lists to process (from PHP session)
+// Lists to process (from PHP session/GET)
 const listsToProcess = <?php echo json_encode(array_values($lists)); ?>;
 
-// Overlay UI helpers
+// Overlay helpers
 function showOverlay() {
-  const el = document.getElementById('cleaningOverlay');
-  if (el) el.style.display = 'flex';
+  document.getElementById('cleaningOverlay').style.display = 'flex';
   setProgress(0, 'Starting cleaning...');
 }
-
-function hideOverlay() {
-  const el = document.getElementById('cleaningOverlay');
-  if (el) el.style.display = 'none';
-}
-
 function setProgress(percent, message, hint) {
   const bar = document.getElementById('cleanProgressBar');
   const pct = document.getElementById('cleanProgressPercent');
   const txt = document.querySelector('.loading-text');
   const hintEl = document.getElementById('cleanExtraHint');
   const p = Math.max(0, Math.min(100, Number(percent) || 0));
-  if (bar) bar.style.width = p + '%';
-  if (pct) pct.textContent = p + '%';
-  if (txt && message) txt.textContent = message;
-  if (hintEl) hintEl.textContent = hint || '';
+  bar.style.width = p + '%';
+  pct.textContent = p + '%';
+  if (message) txt.textContent = message;
+  hintEl.textContent = hint || '';
 }
 
-// Kick a run (idempotent)
+// Kick a run
 async function startRunForList(listId) {
-  await fetch('clean_process.php?list_id=' + encodeURIComponent(listId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'start', list_id: listId })
-  }).catch(() => {});
-}
-
-// Poll once
-async function pollRun(listId) {
-  const r = await fetch('clean_process.php?progress=1&list_id=' + encodeURIComponent(listId), { cache: 'no-store' });
-  let data;
   try {
-    data = await r.json();
+    await fetch('clean_process.php?list_id=' + encodeURIComponent(listId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start', list_id: listId })
+    });
   } catch (e) {
-    throw new Error('Invalid JSON from clean_process.php');
+    console.error('Start failed', e);
   }
-  return data;
 }
 
-// Process one list end-to-end
+// Poll progress
+async function pollRun(listId) {
+  try {
+    const r = await fetch('clean_process.php?progress=1&list_id=' + encodeURIComponent(listId), { cache: 'no-store' });
+    return await r.json();
+  } catch (e) {
+    return { status: 'error', message: 'Invalid JSON from clean_process.php' };
+  }
+}
+
+// Process one list
 async function processOneList(listId, index, totalLists) {
   await startRunForList(listId);
-
   while (true) {
     const data = await pollRun(listId);
-
     if (data.status === 'error') {
       setProgress(100, `❌ Error on list ${listId}`, data.message || 'See server logs');
       throw new Error(data.message || 'Cleaning error');
     }
-
-    // Prefer processed/total (if provided); else fallback to percent
     let percent = 0;
     let msg = `Processing list ${index}/${totalLists}`;
     let hint = '';
-
     if (typeof data.total === 'number' && typeof data.processed === 'number' && data.total > 0) {
       percent = Math.floor((data.processed / data.total) * 100);
       hint = `${data.processed.toLocaleString()} / ${data.total.toLocaleString()} rows`;
     } else if (typeof data.percent === 'number') {
       percent = data.percent;
     }
-
     setProgress(percent, msg, hint);
-
     if (data.status === 'complete' || percent >= 100) {
       setProgress(100, `✅ List ${index}/${totalLists} complete`);
       return;
     }
-
-    // gentle polling
     await new Promise(res => setTimeout(res, 800));
   }
 }
 
-// Orchestrate all lists sequentially
+// Orchestrate all lists
 async function startCleaningAll() {
   if (!listsToProcess || !listsToProcess.length) {
     alert('No uploaded lists to clean.');
     return;
   }
-
   showOverlay();
-
   const btn = document.getElementById('startCleaningBtn');
   if (btn) btn.disabled = true;
-
   try {
     const totalLists = listsToProcess.length;
     for (let i = 0; i < totalLists; i++) {
-      const listId = listsToProcess[i];
-      await processOneList(listId, i + 1, totalLists);
+      await processOneList(listsToProcess[i], i + 1, totalLists);
     }
-
-    // redirect to review for the last processed list
     const lastListId = listsToProcess[listsToProcess.length - 1];
     setProgress(100, '🎉 Cleaning complete! Redirecting to review…');
     setTimeout(() => {
       window.location.href = 'review.php?list_id=' + encodeURIComponent(lastListId);
-    }, 900);
-
+    }, 1000);
   } catch (e) {
     console.error(e);
     alert('Cleaning failed: ' + (e.message || 'Check console/logs'));
   } finally {
-    // keep overlay visible until redirect (comment next line if you prefer hiding on error)
-    // hideOverlay();
-    const btn2 = document.getElementById('startCleaningBtn');
-    if (btn2) btn2.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
