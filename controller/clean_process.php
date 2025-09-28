@@ -1,212 +1,144 @@
 <?php
-declare(strict_types=1);
-session_start();
-require_once __DIR__ . "/../../dB/config.php"; // $conn = mysqli or $pdo = PDO
+include 'db.php';
 
-header('Content-Type: application/json');
+// ========== IMPORT FILE AND CREATE LIST ==========
+if (isset($_POST['upload'])) {
+    $userId = 1; // TODO: set from session
+    $listName = $_FILES['file']['name'];
+    $filePath = $_FILES['file']['tmp_name'];
 
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Not authenticated']);
+    // Create new list entry
+    $conn->query("INSERT INTO beneficiarylist (date_submitted, status, user_id) VALUES (NOW(), 'UPLOADED', $userId)");
+    $listId = $conn->insert_id;
+
+    // Insert beneficiaries in batches
+    $batchSize = 1000;
+    if (($handle = fopen($filePath, "r")) !== FALSE) {
+        fgetcsv($handle); // skip header
+        $batch = [];
+        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+            $batch[] = $data;
+            if (count($batch) >= $batchSize) {
+                insert_batch($batch, $listId, $conn);
+                $batch = [];
+            }
+        }
+        if (count($batch) > 0) {
+            insert_batch($batch, $listId, $conn);
+        }
+        fclose($handle);
+    }
+
+    // Create processing entry
+    $conn->query("INSERT INTO processing_engine (list_id, processing_date, status) VALUES ($listId, NOW(), 'PENDING')");
+    $processingId = $conn->insert_id;
+
+    echo "File imported. Processing ID: $processingId";
     exit;
 }
 
-// CONFIG
-const BATCH_SIZE = 5000; // adjust to 10000–20000 per run
-const PY_TIMEOUT = 60;
+// ========== RUN ANALYSIS ==========
+if (isset($_GET['run_analysis'])) {
+    $processingId = intval($_GET['run_analysis']);
 
-function now(): string {
-    return date('Y-m-d H:i:s');
-}
+    // Lookup list_id
+    $res = $conn->query("SELECT list_id FROM processing_engine WHERE processing_id=$processingId");
+    if (!$res || $res->num_rows == 0) {
+        die("Invalid processing ID");
+    }
+    $listId = $res->fetch_assoc()['list_id'];
 
-// --- UTIL ---
-function getTotalRows(mysqli $conn, int $listId): int {
-    $sql = "SELECT COUNT(*) AS c FROM beneficiary WHERE list_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $listId);
-    $stmt->execute();
-    $res = $stmt->get_result()->fetch_assoc();
-    return (int)$res['c'];
-}
+    // Fetch beneficiaries for this list
+    $rows = [];
+    $idByIndex = [];
+    $q = $conn->prepare("SELECT beneficiary_id, first_name, middle_name, last_name, ext_name,
+                                birth_date, region, province, city, barangay
+                         FROM beneficiary
+                         WHERE list_id=?
+                         ORDER BY beneficiary_id ASC");
+    $q->bind_param('i', $listId);
+    $q->execute();
+    $rs = $q->get_result();
+    $idx = 0;
+    while ($r = $rs->fetch_assoc()) {
+        $rows[] = [
+            'first_name' => $r['first_name'],
+            'middle_name'=> $r['middle_name'],
+            'last_name'  => $r['last_name'],
+            'ext_name'   => $r['ext_name'],
+            'birth_date' => $r['birth_date'],
+            'region'     => $r['region'],
+            'province'   => $r['province'],
+            'city'       => $r['city'],
+            'barangay'   => $r['barangay']
+        ];
+        $idByIndex[$idx] = (int)$r['beneficiary_id'];
+        $idx++;
+    }
+    $q->close();
 
-function getBatch(mysqli $conn, int $listId, int $offset, int $limit): array {
-    $sql = "SELECT id, first_name, middle_name, last_name, dob, gender, address
-            FROM beneficiary
-            WHERE list_id = ?
-            ORDER BY id
-            LIMIT ? OFFSET ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("iii", $listId, $limit, $offset);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    return $res->fetch_all(MYSQLI_ASSOC);
-}
+    // Save debug input
+    file_put_contents("/tmp/analyzer_input_$processingId.json", json_encode($rows, JSON_UNESCAPED_UNICODE));
 
-function startProcessing(mysqli $conn, int $listId): int {
-    // create new processing_engine row
-    $sql = "INSERT INTO processing_engine (list_id, processing_date, status) VALUES (?, ?, 'running')";
-    $stmt = $conn->prepare($sql);
-    $dt = now();
-    $stmt->bind_param("is", $listId, $dt);
-    $stmt->execute();
-    return $conn->insert_id;
-}
-
-function markStatus(mysqli $conn, int $processingId, string $status): void {
-    $sql = "UPDATE processing_engine SET status=? WHERE processing_id=?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("si", $status, $processingId);
-    $stmt->execute();
-}
-
-function runPython(array $rows): array {
-    $cmds = [
-        "python3 clean_data.py",
-        "python clean_data.py",
-        "py -3 clean_data.py"
+    // Run Python analyzer
+    $cmd = "python3 clean_data.py";
+    $descriptorspec = [
+        0 => ["pipe", "r"],
+        1 => ["pipe", "w"],
+        2 => ["pipe", "w"]
     ];
-    foreach ($cmds as $cmd) {
-        $descriptors = [0=>["pipe","r"], 1=>["pipe","w"], 2=>["pipe","w"]];
-        $proc = proc_open($cmd, $descriptors, $pipes, __DIR__);
-        if (!is_resource($proc)) continue;
-
-        fwrite($pipes[0], json_encode($rows));
+    $proc = proc_open($cmd, $descriptorspec, $pipes, __DIR__);
+    if (is_resource($proc)) {
+        fwrite($pipes[0], json_encode($rows, JSON_UNESCAPED_UNICODE));
         fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
+        $ret = proc_close($proc);
 
-        stream_set_blocking($pipes[1], true);
-        stream_set_blocking($pipes[2], true);
-        $out = stream_get_contents($pipes[1]);
-        $err = stream_get_contents($pipes[2]);
-        fclose($pipes[1]); fclose($pipes[2]);
+        file_put_contents("/tmp/analyzer_out_$processingId.json", $stdout);
 
-        $exit = proc_close($proc);
-        if ($exit === 0) {
-            $decoded = json_decode($out, true);
-            if (is_array($decoded)) return $decoded;
+        if ($ret !== 0) {
+            echo "Analyzer failed: $stderr";
+            exit;
         }
-    }
-    throw new RuntimeException("Python failed");
-}
 
-function insertFlagged(mysqli $conn, int $processingId, int $listId, array $flagged): int {
-    if (!$flagged) return 0;
-    $sql = "INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status)
-            VALUES (?, ?, ?, 'flagged')";
-    $stmt = $conn->prepare($sql);
+        $out = json_decode($stdout, true);
 
-    $count = 0;
-    foreach ($flagged as $row) {
-        $bid = $row['id'];
-        $reason = $row['reason'] ?? 'duplicate';
-        $stmt->bind_param("iis", $bid, $processingId, $reason);
-        $stmt->execute();
-        $count++;
-    }
-    return $count;
-}
+        // Insert flagged duplicates
+        $ins = $conn->prepare("INSERT INTO duplicaterecord (beneficiary_id, processing_id, flagged_reason, status) VALUES (?,?,?, 'FLAGGED')");
 
-// --- MAIN ---
-$listId = isset($_GET['list_id']) ? (int)$_GET['list_id'] : 0;
-if ($listId <= 0) {
-    http_response_code(400);
-    echo json_encode(['status'=>'error','message'=>'Missing list_id']);
-    exit;
-}
-
-// Start a new run
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $processingId = startProcessing($conn, $listId);
-    echo json_encode(['status'=>'running','processing_id'=>$processingId]);
-    exit;
-}
-
-// Poll progress
-if (isset($_GET['progress'])) {
-    // Get latest processing row for this list
-    $res = $conn->query("SELECT * FROM processing_engine WHERE list_id={$listId} ORDER BY processing_id DESC LIMIT 1");
-    if (!$res || $res->num_rows===0) {
-        echo json_encode(['status'=>'error','message'=>'No processing run found']);
-        exit;
-    }
-    $run = $res->fetch_assoc();
-    $processingId = (int)$run['processing_id'];
-
-    if ($run['status']==='complete') {
-        echo json_encode(['status'=>'complete','percent'=>100]);
-        exit;
-    }
-
-    // figure out how many already flagged
-    $doneRes = $conn->query("SELECT COUNT(*) AS c FROM duplicaterecord WHERE processing_id={$processingId}");
-    $doneCount = (int)$doneRes->fetch_assoc()['c'];
-
-    $total = getTotalRows($conn, $listId);
-    $offset = $doneCount; // assume processed ~ flagged (approx)
-    if ($offset >= $total) {
-        markStatus($conn, $processingId, 'complete');
-        echo json_encode(['status'=>'complete','percent'=>100]);
-        exit;
-    }
-
-    $batch = getBatch($conn, $listId, $offset, BATCH_SIZE);
-    if (!$batch) {
-        markStatus($conn, $processingId, 'complete');
-        echo json_encode(['status'=>'complete','percent'=>100]);
-        exit;
-    }
-
-    // send to python
-    try {
-        $result = runPython($batch);
-    } catch (Throwable $e) {
-        markStatus($conn, $processingId, 'error');
-        http_response_code(500);
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
-        exit;
-    }
-
-    $flagged = [];
-    if (!empty($result['missing_data'])) {
-        foreach ($result['missing_data'] as $r) {
-            $r['reason'] = 'missing_data';
-            $flagged[] = $r;
-        }
-    }
-    foreach (['exact_duplicates','fuzzy_duplicates','sounds_like_duplicates'] as $ptype) {
-        if (!empty($result[$ptype])) {
-            foreach ($result[$ptype] as $pair) {
-                if (isset($batch[$pair['row1_index']])) {
-                    $row = $batch[$pair['row1_index']];
-                    $row['reason'] = $ptype;
-                    $flagged[] = $row;
-                }
-                if (isset($batch[$pair['row2_index']])) {
-                    $row = $batch[$pair['row2_index']];
-                    $row['reason'] = $ptype;
-                    $flagged[] = $row;
+        foreach (['exact_duplicates','fuzzy_duplicates','sounds_like_duplicates'] as $key) {
+            foreach ($out[$key] as $pair) {
+                $a = $idByIndex[(int)$pair['row1_index']] ?? null;
+                $b = $idByIndex[(int)$pair['row2_index']] ?? null;
+                if ($a && $b) {
+                    $reason = ucfirst(str_replace('_',' ',$key)) . " with ID $b";
+                    $ins->bind_param('iis', $a, $processingId, $reason);
+                    $ins->execute();
                 }
             }
         }
+        $ins->close();
+
+        // Update processing status
+        $conn->query("UPDATE processing_engine SET status='DONE' WHERE processing_id=$processingId");
+
+        echo "Analysis complete.";
     }
-
-    $flaggedCount = insertFlagged($conn, $processingId, $listId, $flagged);
-
-    $processed = min($offset + count($batch), $total);
-    $percent = $total > 0 ? floor(($processed / $total) * 100) : 100;
-
-    if ($processed >= $total) {
-        markStatus($conn, $processingId, 'complete');
-    }
-
-    echo json_encode([
-        'status'=>'running',
-        'percent'=>$percent,
-        'processed'=>$processed,
-        'total'=>$total,
-        'flagged'=>$flaggedCount
-    ]);
-    exit;
 }
 
-http_response_code(400);
-echo json_encode(['status'=>'error','message'=>'Invalid request']);
+// ========== HELPERS ==========
+function insert_batch($batch, $listId, $conn) {
+    $ins = $conn->prepare("INSERT INTO beneficiary 
+        (list_id, first_name, last_name, middle_name, ext_name, birth_date, region, province, city, barangay, marital_status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+    foreach ($batch as $row) {
+        list($first, $last, $middle, $ext, $dob, $region, $province, $city, $barangay, $marital) = $row;
+        $ins->bind_param('issssssssss', $listId, $first, $last, $middle, $ext, $dob, $region, $province, $city, $barangay, $marital);
+        $ins->execute();
+    }
+    $ins->close();
+}
+?>

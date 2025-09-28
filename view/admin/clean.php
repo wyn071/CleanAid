@@ -1,222 +1,133 @@
 <?php
-session_start();
-include('../../dB/config.php');
+// clean.php
+// Upload UI + AJAX progress for big files (streamed import + background analysis)
 
-// Prefer ?lists= param over session
-if (isset($_GET['lists'])) {
-  $lists = array_filter(array_map('intval', explode(',', $_GET['lists'])));
-  // ✅ store to session para consistent
-  $_SESSION['uploaded_lists'] = $lists;
-} else {
-  $lists = $_SESSION['uploaded_lists'] ?? [];
-}
-
-// Helper to fetch file name for each list
-function getListFileName(mysqli $conn, $listId) {
-  $listId = (int)$listId;
-  $res = mysqli_query($conn, "SELECT fileName FROM beneficiarylist WHERE list_id = {$listId} LIMIT 1");
-  if ($res && $row = mysqli_fetch_assoc($res)) {
-    return $row['fileName'];
-  }
-  return "List #{$listId}";
-}
 ?>
-
-<?php include("./includes/header.php"); ?>
-<?php include("./includes/topbar.php"); ?>
-<?php include("./includes/sidebar.php"); ?>
-
-<main class="main bg-body-tertiary" style="min-height: 100vh;">
-  <section class="container py-5">
-    <h2 class="fw-bold">Clean Data</h2>
-    <p class="text-muted">Run data cleansing to detect duplicates and inconsistencies in your uploaded data.</p>
-
-    <!-- Uploaded Files -->
-    <div class="card shadow-sm border-0 rounded-4 p-4 mb-4 w-100">
-      <div class="d-flex align-items-center justify-content-between">
-        <h5 class="fw-semibold mb-3">Uploaded Files</h5>
-        <?php if (!empty($lists)): ?>
-          <span class="badge text-bg-light"><?= count($lists) ?> file(s)</span>
-        <?php endif; ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CleanAid — Import Beneficiaries</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
+    .card { max-width: 720px; padding: 1.5rem; border: 1px solid #e5e7eb; border-radius: 12px; }
+    .row { margin-bottom: 1rem; }
+    .btn { background: #2563eb; color: #fff; border: 0; padding: .6rem 1rem; border-radius: 8px; cursor: pointer; }
+    .btn:disabled { opacity: .6; }
+    progress { width: 100%; height: 16px; }
+    .muted { color: #6b7280; font-size: .9rem; }
+    .ok { color: #065f46; }
+    .warn { color: #92400e; }
+    .err { color: #991b1b; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .link { color: #2563eb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Import Beneficiaries (Large File Safe)</h2>
+    <p class="muted">CSV with header: first_name,last_name,middle_name,ext_name,birth_date,region,province,city,barangay,marital_status</p>
+    <form id="uploadForm" action="clean_process.php" method="POST" enctype="multipart/form-data" target="hidden_iframe">
+      <div class="row">
+        <input type="file" name="file" id="file" accept=".csv" required />
       </div>
+      <div class="row">
+        <button class="btn" id="btnUpload">Start Import</button>
+      </div>
+    </form>
 
-      <?php if (!empty($lists)): ?>
-        <ul class="list-group list-group-flush mb-3">
-          <?php foreach ($lists as $listId): ?>
-            <?php $fileLabel = getListFileName($conn, $listId); ?>
-            <li class="list-group-item d-flex align-items-center gap-2">
-              <img src="https://cdn-icons-png.flaticon.com/512/4725/4725976.png" alt="xls icon" width="24">
-              <span class="me-auto"><?= htmlspecialchars($fileLabel) ?></span>
-              <code class="text-muted">list_id: <?= (int)$listId ?></code>
-            </li>
-          <?php endforeach; ?>
-        </ul>
-        <div class="text-muted small">These lists will be scanned for duplicate entries.</div>
-      <?php else: ?>
-        <div class="alert alert-warning mb-0">No uploaded lists found.</div>
-      <?php endif; ?>
+    <div id="statusArea" style="display:none;">
+      <h3>Status</h3>
+      <div class="row"><progress id="pg" value="0" max="100"></progress></div>
+      <div class="row mono"><span id="lbl"></span></div>
+      <div class="row mono muted" id="detail"></div>
+      <div class="row" id="reviewLink" style="display:none;"></div>
     </div>
 
-    <!-- Start Cleaning Button -->
-    <?php if (!empty($lists)): ?>
-      <div class="text-center">
-        <button id="startCleaningBtn" type="button" class="btn btn-success px-4 rounded-pill">
-          Start Cleaning
-        </button>
-      </div>
-    <?php endif; ?>
-  </section>
-</main>
-
-<!-- Cleaning Progress Overlay -->
-<div id="cleaningOverlay">
-  <div class="loader-container">
-    <div class="spinner"></div>
-    <p class="loading-text">Starting cleaning...</p>
-    <div class="progress-wrapper">
-      <div id="cleanProgressBar"></div>
-    </div>
-    <p id="cleanProgressPercent">0%</p>
-    <div class="mt-2 small text-muted" id="cleanExtraHint"></div>
+    <iframe name="hidden_iframe" style="display:none;"></iframe>
   </div>
-</div>
-
-<style>
-#cleaningOverlay {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(255, 255, 255, 0.95);
-  display: none;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  flex-direction: column;
-}
-.loader-container { text-align: center; max-width: 400px; width: 100%; }
-.spinner {
-  width: 60px; height: 60px;
-  border: 6px solid #ddd;
-  border-top: 6px solid #dc3545;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: auto;
-}
-.loading-text { margin: 15px 0; font-size: 18px; color: #333; font-weight: 500; }
-.progress-wrapper {
-  width: 100%; height: 12px; background: #eee;
-  border-radius: 8px; overflow: hidden; margin: 10px 0;
-}
-#cleanProgressBar {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, #dc3545, #ff6b6b);
-  transition: width 0.3s ease;
-}
-#cleanProgressPercent { font-size: 14px; font-weight: 600; color: #dc3545; }
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
 
 <script>
-// Lists to process (from PHP session/GET)
-const listsToProcess = <?php echo json_encode(array_values($lists)); ?>;
+const form = document.getElementById('uploadForm');
+const btn = document.getElementById('btnUpload');
+const statusArea = document.getElementById('statusArea');
+const pg = document.getElementById('pg');
+const lbl = document.getElementById('lbl');
+const detail = document.getElementById('detail');
+const reviewLink = document.getElementById('reviewLink');
 
-// Overlay helpers
-function showOverlay() {
-  document.getElementById('cleaningOverlay').style.display = 'flex';
-  setProgress(0, 'Starting cleaning...');
-}
-function setProgress(percent, message, hint) {
-  const bar = document.getElementById('cleanProgressBar');
-  const pct = document.getElementById('cleanProgressPercent');
-  const txt = document.querySelector('.loading-text');
-  const hintEl = document.getElementById('cleanExtraHint');
-  const p = Math.max(0, Math.min(100, Number(percent) || 0));
-  bar.style.width = p + '%';
-  pct.textContent = p + '%';
-  if (message) txt.textContent = message;
-  hintEl.textContent = hint || '';
-}
+let processingId = null;
+let listId = null;
+let pollTimer = null;
 
-// Kick a run
-async function startRunForList(listId) {
-  try {
-    await fetch('clean_process.php?list_id=' + encodeURIComponent(listId), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'start', list_id: listId })
-    });
-  } catch (e) {
-    console.error('Start failed', e);
-  }
-}
-
-// Poll progress
-async function pollRun(listId) {
-  try {
-    const r = await fetch('clean_process.php?progress=1&list_id=' + encodeURIComponent(listId), { cache: 'no-store' });
-    return await r.json();
-  } catch (e) {
-    return { status: 'error', message: 'Invalid JSON from clean_process.php' };
-  }
-}
-
-// Process one list
-async function processOneList(listId, index, totalLists) {
-  await startRunForList(listId);
-  while (true) {
-    const data = await pollRun(listId);
-    if (data.status === 'error') {
-      setProgress(100, `❌ Error on list ${listId}`, data.message || 'See server logs');
-      throw new Error(data.message || 'Cleaning error');
-    }
-    let percent = 0;
-    let msg = `Processing list ${index}/${totalLists}`;
-    let hint = '';
-    if (typeof data.total === 'number' && typeof data.processed === 'number' && data.total > 0) {
-      percent = Math.floor((data.processed / data.total) * 100);
-      hint = `${data.processed.toLocaleString()} / ${data.total.toLocaleString()} rows`;
-    } else if (typeof data.percent === 'number') {
-      percent = data.percent;
-    }
-    setProgress(percent, msg, hint);
-    if (data.status === 'complete' || percent >= 100) {
-      setProgress(100, `✅ List ${index}/${totalLists} complete`);
-      return;
-    }
-    await new Promise(res => setTimeout(res, 800));
-  }
-}
-
-// Orchestrate all lists
-async function startCleaningAll() {
-  if (!listsToProcess || !listsToProcess.length) {
-    alert('No uploaded lists to clean.');
-    return;
-  }
-  showOverlay();
-  const btn = document.getElementById('startCleaningBtn');
-  if (btn) btn.disabled = true;
-  try {
-    const totalLists = listsToProcess.length;
-    for (let i = 0; i < totalLists; i++) {
-      await processOneList(listsToProcess[i], i + 1, totalLists);
-    }
-    const lastListId = listsToProcess[listsToProcess.length - 1];
-    setProgress(100, '🎉 Cleaning complete! Redirecting to review…');
-    setTimeout(() => {
-      window.location.href = 'review.php?list_id=' + encodeURIComponent(lastListId);
-    }, 1000);
-  } catch (e) {
-    console.error(e);
-    alert('Cleaning failed: ' + (e.message || 'Check console/logs'));
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// Wire up button
-document.addEventListener('DOMContentLoaded', () => {
-  const startBtn = document.getElementById('startCleaningBtn');
-  if (startBtn) startBtn.addEventListener('click', startCleaningAll);
+form.addEventListener('submit', (e) => {
+  statusArea.style.display = 'block';
+  btn.disabled = true;
+  lbl.textContent = 'Uploading & streaming rows into database...';
+  pg.value = 5;
+  detail.textContent = '';
 });
+
+window.addEventListener('message', (event) => {
+  // Expect a JSON message from clean_process.php containing {ok, list_id, processing_id, note}
+  try {
+    const data = JSON.parse(event.data);
+    if (!data) return;
+    if (data.ok) {
+      listId = data.list_id;
+      processingId = data.processing_id;
+      lbl.textContent = 'Import started. Background analysis will run shortly...';
+      pg.value = 30;
+      pollStatus();
+    } else {
+      lbl.textContent = 'Error: ' + (data.error || 'Unknown error');
+      detail.textContent = data.note || '';
+      pg.value = 0;
+      btn.disabled = false;
+    }
+  } catch(_) {}
+}, false);
+
+function pollStatus() {
+  if (!processingId) return;
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`clean_process.php?action=progress&processing_id=${processingId}`);
+      const j = await r.json();
+      // j: {status, inserted_rows, total_rows, phase, note}
+      if (j.total_rows > 0) {
+        const pct = j.phase === 'IMPORT' ? Math.min(95, Math.floor((j.inserted_rows / j.total_rows) * 90) + 5) :
+                   j.phase === 'ANALYZE' ? 96 :
+                   j.phase === 'DONE' ? 100 : 50;
+        pg.value = pct;
+      }
+      lbl.textContent = `Phase: ${j.phase} — Status: ${j.status}`;
+      detail.textContent = j.note || '';
+
+      if (j.phase === 'DONE' || j.status === 'DONE') {
+        clearInterval(pollTimer);
+        pg.value = 100;
+        lbl.textContent = 'Completed!';
+        reviewLink.style.display = 'block';
+        reviewLink.innerHTML = `<a class="link" href="review.php?processing_id=${processingId}&list_id=${listId}">Open Review</a>`;
+        btn.disabled = false;
+      }
+      if (j.status === 'FAILED') {
+        clearInterval(pollTimer);
+        lbl.textContent = 'Processing failed.';
+        btn.disabled = false;
+      }
+    } catch (e) {
+      // ignore transient errors
+    }
+  }, 1500);
+}
 </script>
+
+<script>
+// Let the hidden iframe send a postMessage back with JSON
+// clean_process.php prints a tiny HTML that calls parent.postMessage(...)
+</script>
+</body>
+</html>

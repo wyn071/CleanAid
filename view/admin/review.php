@@ -1,116 +1,111 @@
 <?php
-session_start();
-require_once __DIR__ . "/../../dB/config.php";
+// review.php
+require_once 'db.php';
 
-if (!isset($_GET['list_id'])) { http_response_code(400); echo "Missing list_id"; exit; }
-$listId = (int)$_GET['list_id'];
+$processingId = isset($_GET['processing_id']) ? (int)$_GET['processing_id'] : 0;
+$listId = isset($_GET['list_id']) ? (int)$_GET['list_id'] : 0;
 
-// Latest processing for this list
-$st = $pdo->prepare("SELECT processing_id, status, processing_date FROM processing_engine WHERE list_id=? ORDER BY processing_id DESC LIMIT 1");
-$st->execute([$listId]);
-$proc = $st->fetch(PDO::FETCH_ASSOC);
-
-if (!$proc) {
-    echo "<h2>No processing run found for list_id $listId.</h2>";
+if ($processingId <= 0 || $listId <= 0) {
+    http_response_code(400);
+    echo "processing_id and list_id are required.";
     exit;
 }
-$processingId = (int)$proc['processing_id'];
 
-// Counts (derive from existing tables)
-$st = $pdo->prepare("SELECT COUNT(*) FROM beneficiary WHERE list_id=?");
-$st->execute([$listId]);
-$total = (int)$st->fetchColumn();
+// Get status
+$st = $conn->prepare("SELECT status, processing_date FROM processing_engine WHERE processing_id=?");
+$st->bind_param('i', $processingId);
+$st->execute();
+$eng = $st->get_result()->fetch_assoc();
+$st->close();
 
-$st = $pdo->prepare("SELECT COUNT(DISTINCT beneficiary_id) FROM duplicaterecord WHERE processing_id=?");
-$st->execute([$processingId]);
-$flaggedCount = (int)$st->fetchColumn();
+// Count flagged
+$c = $conn->prepare("SELECT COUNT(*) AS c FROM duplicaterecord WHERE processing_id=?");
+$c->bind_param('i', $processingId);
+$c->execute();
+$flagCount = (int)$c->get_result()->fetch_assoc()['c'];
+$c->close();
 
+// Fetch flagged with beneficiary details
+$sql = "
+SELECT dr.duplicate_id, dr.flagged_reason, b.beneficiary_id,
+       b.first_name, b.middle_name, b.last_name, b.ext_name,
+       b.birth_date, b.region, b.province, b.city, b.barangay
+FROM duplicaterecord dr
+JOIN beneficiary b ON b.beneficiary_id = dr.beneficiary_id
+WHERE dr.processing_id=?
+ORDER BY dr.duplicate_id ASC
+LIMIT 1000
+";
+$st = $conn->prepare($sql);
+$st->bind_param('i', $processingId);
+$st->execute();
+$res = $st->get_result();
+$rows = [];
+while ($r = $res->fetch_assoc()) { $rows[] = $r; }
+$st->close();
 ?>
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Review — List <?= htmlspecialchars($listId) ?></title>
+  <meta charset="UTF-8" />
+  <title>CleanAid — Review Duplicates</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; }
-    th { background: #f5f5f5; text-align: left; }
-    .badge { display:inline-block; padding:4px 8px; border-radius:10px; font-size:12px; }
-    .ok { background:#e7f6ed; color:#1e7e34; }
-    .err { background:#fdecea; color:#b02a37; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; }
+    .card { grid-column: span 12; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 12px; }
+    .muted { color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: .5rem .6rem; border-bottom: 1px solid #f3f4f6; text-align: left; font-size: .95rem; }
+    th { background: #f9fafb; }
+    .pill { display:inline-block; padding: .2rem .5rem; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: .8rem; }
   </style>
 </head>
 <body>
-  <h1>Cleaning Results — List <?= htmlspecialchars($listId) ?></h1>
+  <div class="grid">
+    <div class="card">
+      <h2>Processing #<?= htmlspecialchars($processingId) ?> — List #<?= htmlspecialchars($listId) ?></h2>
+      <p class="muted">
+        Status: <span class="pill"><?= htmlspecialchars($eng['status'] ?? 'UNKNOWN') ?></span> •
+        Date: <?= htmlspecialchars($eng['processing_date'] ?? '') ?> •
+        Flagged: <strong><?= $flagCount ?></strong>
+      </p>
+      <p><a href="clean.php">← Import another file</a></p>
+    </div>
 
-  <p>
-    Status:
-    <?php if ($proc['status']==='complete'): ?>
-      <span class="badge ok">Complete</span>
-    <?php elseif ($proc['status']==='running'): ?>
-      <span class="badge">Running</span>
-    <?php else: ?>
-      <span class="badge err">Error</span>
-    <?php endif; ?>
-    &nbsp; Processing ID: <strong><?= htmlspecialchars($processingId) ?></strong>
-    &nbsp; Date: <?= htmlspecialchars($proc['processing_date']) ?>
-  </p>
-
-  <h3>Summary</h3>
-  <p>Total records: <strong><?= $total ?></strong></p>
-  <p>Flagged beneficiaries (distinct): <strong><?= $flaggedCount ?></strong></p>
-
-  <?php if ($flaggedCount === 0): ?>
-    <p>No issues found for this run.</p>
-  <?php else: ?>
-    <h3>Flagged Rows (showing first 200)</h3>
-    <table>
-      <tr>
-        <th>Beneficiary ID</th>
-        <th>Reason</th>
-        <th>First</th>
-        <th>Middle</th>
-        <th>Last</th>
-        <th>Ext</th>
-        <th>Birth Date</th>
-        <th>Region</th>
-        <th>Province</th>
-        <th>City</th>
-        <th>Barangay</th>
-      </tr>
-      <?php
-        // join duplicaterecord -> beneficiary for details
-        $q = $pdo->prepare("
-          SELECT dr.beneficiary_id, dr.flagged_reason,
-                 b.first_name, b.middle_name, b.last_name, b.ext_name,
-                 b.birth_date, b.region, b.province, b.city, b.barangay
-          FROM duplicaterecord dr
-          JOIN beneficiary b ON b.beneficiary_id = dr.beneficiary_id
-          WHERE dr.processing_id = ?
-          GROUP BY dr.beneficiary_id, dr.flagged_reason,
-                   b.first_name, b.middle_name, b.last_name, b.ext_name,
-                   b.birth_date, b.region, b.province, b.city, b.barangay
-          LIMIT 200
-        ");
-        $q->execute([$processingId]);
-        while ($r = $q->fetch(PDO::FETCH_ASSOC)):
-      ?>
-        <tr>
-          <td><?= htmlspecialchars($r['beneficiary_id']) ?></td>
-          <td><?= htmlspecialchars($r['flagged_reason']) ?></td>
-          <td><?= htmlspecialchars($r['first_name']) ?></td>
-          <td><?= htmlspecialchars($r['middle_name']) ?></td>
-          <td><?= htmlspecialchars($r['last_name']) ?></td>
-          <td><?= htmlspecialchars($r['ext_name']) ?></td>
-          <td><?= htmlspecialchars($r['birth_date']) ?></td>
-          <td><?= htmlspecialchars($r['region']) ?></td>
-          <td><?= htmlspecialchars($r['province']) ?></td>
-          <td><?= htmlspecialchars($r['city']) ?></td>
-          <td><?= htmlspecialchars($r['barangay']) ?></td>
-        </tr>
-      <?php endwhile; ?>
-    </table>
-  <?php endif; ?>
+    <div class="card">
+      <h3>Flagged Records (first 1000)</h3>
+      <?php if (!$rows): ?>
+        <p class="muted">No duplicates were flagged for this run.</p>
+      <?php else: ?>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Beneficiary</th>
+              <th>DOB</th>
+              <th>Location</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($rows as $i => $r): ?>
+              <tr>
+                <td><?= htmlspecialchars($r['duplicate_id']) ?></td>
+                <td>
+                  <?= htmlspecialchars(trim(($r['last_name'] ?? '').', '.($r['first_name'] ?? '').' '.($r['middle_name'] ?? ''))) ?>
+                  <?= $r['ext_name'] ? ' '.htmlspecialchars($r['ext_name']) : '' ?>
+                  <div class="muted">ID: <?= htmlspecialchars($r['beneficiary_id']) ?></div>
+                </td>
+                <td><?= htmlspecialchars($r['birth_date']) ?></td>
+                <td><?= htmlspecialchars($r['region'] . ', ' . $r['province'] . ', ' . $r['city'] . ', ' . $r['barangay']) ?></td>
+                <td><?= htmlspecialchars($r['flagged_reason']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </div>
+  </div>
 </body>
 </html>
