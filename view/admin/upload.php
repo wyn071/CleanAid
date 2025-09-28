@@ -1,6 +1,5 @@
 <?php
-session_start();
-?>
+session_start(); ?>
 
 <?php include("./includes/header.php"); ?>
 <?php include("./includes/topbar.php"); ?>
@@ -54,7 +53,6 @@ session_start();
 
   let selectedFiles = [];
 
-  // --- Drag & Drop logic ---
   dropZone.addEventListener('click', () => fileInput.click());
 
   dropZone.addEventListener('dragover', e => {
@@ -79,7 +77,6 @@ session_start();
     renderFilePreview();
   });
 
-  // --- Handle upload form submit ---
   document.getElementById('uploadForm').addEventListener('submit', function (e) {
     e.preventDefault();
 
@@ -99,7 +96,6 @@ session_start();
 
     const xhr = new XMLHttpRequest();
 
-    // Track upload progress
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const percent = Math.round((e.loaded / e.total) * 100);
@@ -108,46 +104,27 @@ session_start();
       }
     });
 
-    // Handle response
     xhr.onload = function () {
-    if (xhr.status === 200) {
-      try {
-        const res = JSON.parse(xhr.responseText);
-
-        if (res.success) {
-          loadingText.innerText = "📊 Processing data...";
-
-          // 👉 Start polling each processing_id
-          res.processing_ids.forEach(id => {
-            pollProgress(id);
-          });
-
-        } else {
-          alert("❌ Upload failed:\n" + res.errors.join("\n"));
-          loadingOverlay.style.display = 'none';
-        }
-      } catch (e) {
-        alert("⚠️ Invalid server response.");
+      if (xhr.status === 200) {
+        loadingText.innerText = "✅ Upload complete! Redirecting...";
+        setTimeout(() => {
+          window.location.href = "../admin/clean.php";
+        }, 1000);
+      } else {
+        alert("❌ Upload failed.");
         loadingOverlay.style.display = 'none';
       }
-    } else {
-      alert("❌ Upload failed (server error).");
-      loadingOverlay.style.display = 'none';
-    }
-  };
-
+    };
 
     xhr.onerror = function () {
       alert("⚠️ Upload error.");
       loadingOverlay.style.display = 'none';
     };
 
-    // 🔑 Make sure this path is correct relative to your folder structure
-    xhr.open('POST', '/CleanAid/controller/upload_process.php', true);
+    xhr.open('POST', '../../controller/upload_process.php', true);
     xhr.send(formData);
   });
 
-  // --- Render file preview ---
   function renderFilePreview() {
     const dt = new DataTransfer();
     selectedFiles.forEach(file => dt.items.add(file));
@@ -193,7 +170,7 @@ session_start();
       case 'csv':
         return 'https://cdn-icons-png.flaticon.com/512/9496/9496460.png';
       case 'xls':
-        return 'https://cdn-icons-png.flaticon.com/512/9496/9496456.png';
+        return 'https://cdn-icons-png.flaticon.com/512/9496/9496456.png'
       case 'xlsx':
         return 'https://cdn-icons-png.flaticon.com/512/9496/9496502.png';
       default:
@@ -203,6 +180,7 @@ session_start();
 </script>
 
 <style>
+  /* File preview styles (same as before) */
   .file-preview-row {
     display: flex;
     flex-wrap: wrap;
@@ -262,6 +240,7 @@ session_start();
     background: #e9e9e9;
   }
 
+  /* Loading overlay styles */
   #loadingOverlay {
     position: fixed;
     top: 0; left: 0;
@@ -273,27 +252,48 @@ session_start();
     z-index: 9999;
     flex-direction: column;
   }
-  .loader-container { text-align: center; max-width: 400px; width: 100%; }
+  .loader-container {
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+  }
   .spinner {
-    width: 60px; height: 60px;
+    width: 60px;
+    height: 60px;
     border: 6px solid #ddd;
     border-top: 6px solid #007bff;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: auto;
   }
-  .loading-text { margin: 15px 0; font-size: 18px; color: #333; font-weight: 500; }
+  .loading-text {
+    margin: 15px 0;
+    font-size: 18px;
+    color: #333;
+    font-weight: 500;
+  }
   .progress-wrapper {
-    width: 100%; height: 12px; background: #eee;
-    border-radius: 8px; overflow: hidden; margin: 10px 0;
+    width: 100%;
+    height: 12px;
+    background: #eee;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 10px 0;
   }
   #progressBar {
-    height: 100%; width: 0%;
+    height: 100%;
+    width: 0%;
     background: linear-gradient(90deg, #007bff, #00c6ff);
     transition: width 0.3s ease;
   }
-  #progressPercent { font-size: 14px; font-weight: 600; color: #007bff; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  #progressPercent {
+    font-size: 14px;
+    font-weight: 600;
+    color: #007bff;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 
 <?php include("./includes/footer.php"); ?>
