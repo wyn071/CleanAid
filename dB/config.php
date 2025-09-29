@@ -18,6 +18,7 @@ try {
     // $conn = new mysqli($servername, $username, $password, $database);
     $conn = new mysqli($servername, $username, $password, $database, $port);
     $conn->set_charset("utf8mb4");
+    echo "Database connection successful!";
 } catch (mysqli_sql_exception $e) {
     http_response_code(500);
     die("Database connection failed.");
