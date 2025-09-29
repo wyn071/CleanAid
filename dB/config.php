@@ -22,6 +22,12 @@ try {
     http_response_code(500);
     die("Database connection failed.");
 }
-`
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+} else {
+    echo "Database connection successful!";
+}
+
 //MYSQL_URL (from Railway):
 //mysql://root:gMhexrzIPxuhRNOziuCWwTTJEsGXdvQy@mysql.railway.internal:3306/railway
