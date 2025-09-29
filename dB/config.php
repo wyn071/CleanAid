@@ -22,6 +22,6 @@ try {
     http_response_code(500);
     die("Database connection failed.");
 }
-
+`
 //MYSQL_URL (from Railway):
 //mysql://root:gMhexrzIPxuhRNOziuCWwTTJEsGXdvQy@mysql.railway.internal:3306/railway
